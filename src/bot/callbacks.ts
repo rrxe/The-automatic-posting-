@@ -709,6 +709,12 @@ export async function handleCallbacks(
       "../services/publish.js"
     );
 
+    const {
+      enqueuePublish
+    } = await import(
+      "../services/publishQueue.js"
+    );
+
     const user =
       await getUserByTelegramId(
         ctx.from.id
@@ -880,35 +886,77 @@ export async function handleCallbacks(
         }
       );
 
-      const result =
-        await executePublishCycles(
-          user.id,
-          message.telegram_account_id,
-          run.runId,
-          cycleLimit,
-          delay
-        );
+      void enqueuePublish(
+        () =>
+          executePublishCycles(
+            user.id,
+            message.telegram_account_id,
+            run.runId,
+            cycleLimit,
+            delay
+          )
+      )
+        .then(async (result) => {
+          try {
+            await ctx.reply(
+              "🏁 انتهت عملية التشغيل\n\n" +
+              `🔄 الدورات: ${result.completedCycles} / ${result.cycleLimit}\n` +
+              `✅ نجح: ${result.success}\n` +
+              `❌ فشل: ${result.failed}\n\n` +
+              `📌 الحالة: ${result.status}`,
+              {
+                reply_markup:
+                  new InlineKeyboard()
+                    .text(
+                      "📊 سجل النشر",
+                      "publish_history"
+                    )
+                    .row()
+                    .text(
+                      "🏠 الرئيسية",
+                      "dashboard"
+                    )
+              }
+            );
+          } catch (error) {
+            console.error(
+              "PUBLISH FINISH MESSAGE ERROR:",
+              error
+            );
+          }
+        })
+        .catch(async (error) => {
+          console.error(
+            "BACKGROUND PUBLISH ERROR:",
+            error
+          );
 
-      await ctx.reply(
-        "🏁 انتهت عملية التشغيل\n\n" +
-        `🔄 الدورات: ${result.completedCycles} / ${result.cycleLimit}\n` +
-        `✅ نجح: ${result.success}\n` +
-        `❌ فشل: ${result.failed}\n\n` +
-        `📌 الحالة: ${result.status}`,
-        {
-          reply_markup:
-            new InlineKeyboard()
-              .text(
-                "📊 سجل النشر",
-                "publish_history"
-              )
-              .row()
-              .text(
-                "🏠 الرئيسية",
-                "dashboard"
-              )
-        }
-      );
+          try {
+            await ctx.reply(
+              "❌ توقف تشغيل النشر بسبب خطأ.\n\n" +
+              (
+                error instanceof Error
+                  ? error.message
+                  : String(error)
+              ),
+              {
+                reply_markup:
+                  new InlineKeyboard()
+                    .text(
+                      "📊 سجل النشر",
+                      "publish_history"
+                    )
+                    .row()
+                    .text(
+                      "🏠 الرئيسية",
+                      "dashboard"
+                    )
+              }
+            );
+          } catch {}
+        });
+
+
     } catch (
       error
     ) {

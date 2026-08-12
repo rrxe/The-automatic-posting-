@@ -485,6 +485,125 @@ export async function handleAdminText(
     return;
   }
 
+  /*
+   * VIP grant — تتم معالجته مباشرة
+   * قبل بقية إعدادات النص حتى لا يسقط
+   * بصمت بسبب أي setting map آخر.
+   */
+  if (
+    adminAction ===
+    "vip_grant"
+  ) {
+    const parts =
+      text
+        .trim()
+        .split(/\s+/);
+
+    if (
+      parts.length < 2
+    ) {
+      await ctx.reply(
+        "❌ الصيغة الصحيحة:\n\n" +
+        "Telegram ID + عدد الأيام\n\n" +
+        "مثال:\n" +
+        "8557464787 30"
+      );
+
+      return;
+    }
+
+    const targetId =
+      Number(
+        parts[0]
+      );
+
+    const days =
+      Number(
+        parts[1]
+      );
+
+    if (
+      !Number.isSafeInteger(
+        targetId
+      ) ||
+      targetId <= 0
+    ) {
+      await ctx.reply(
+        "❌ Telegram ID غير صحيح."
+      );
+
+      return;
+    }
+
+    if (
+      !Number.isInteger(
+        days
+      ) ||
+      days <= 0 ||
+      days > 3650
+    ) {
+      await ctx.reply(
+        "❌ عدد الأيام يجب أن يكون بين 1 و3650."
+      );
+
+      return;
+    }
+
+    try {
+      const {
+        grantVip
+      } = await import(
+        "../services/adminManagement.js"
+      );
+
+      const expires =
+        await grantVip(
+          telegramId,
+          targetId,
+          days
+        );
+
+      await clearAdminAction(
+        telegramId
+      );
+
+      await ctx.reply(
+        "✅ تم منح VIP بنجاح.\n\n" +
+        `👤 Telegram ID: ${targetId}\n` +
+        `⭐ المدة: ${days} يوم\n` +
+        `📅 الانتهاء: ${expires.toISOString()}`
+      );
+    } catch (error) {
+      console.error(
+        "VIP GRANT ERROR:",
+        error
+      );
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error);
+
+      if (
+        message ===
+        "USER_NOT_FOUND"
+      ) {
+        await ctx.reply(
+          "❌ المستخدم غير موجود في قاعدة البيانات.\n\n" +
+          "يجب أن يبدأ المستخدم البوت أولاً."
+        );
+      } else {
+        await ctx.reply(
+          "❌ فشل منح VIP.\n\n" +
+          message
+        );
+      }
+    }
+
+    return;
+  }
+
+
   if (
     adminAction ===
     "add_mandatory_channel"

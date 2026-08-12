@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@grammyjs/runner": "^2.0.3",
     "@supabase/supabase-js": "^2.54.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
