@@ -1,7 +1,8 @@
 import { supabase } from "../db/supabase.js";
 
 import {
-  getTelegramClient
+  getTelegramClient,
+  touchTelegramClient
 } from "../telegram/clientManager.js";
 
 import {
@@ -593,6 +594,10 @@ export async function executePublishCycles(
             message:
               text
           }
+        );
+
+        touchTelegramClient(
+          accountId
         );
 
         cycleSuccess++;

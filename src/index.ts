@@ -5,6 +5,14 @@ import helmet from "helmet";
 import { bot } from "./bot/index.js";
 import { env } from "./config/env.js";
 
+import {
+  reconcileStuckPublishRuns
+} from "./services/publishControl.js";
+
+import {
+  startIdleClientSweeper
+} from "./telegram/clientManager.js";
+
 const app = express();
 
 app.use(helmet());
@@ -28,6 +36,17 @@ app.get("/health", (_req, res) => {
 
 async function main() {
   console.log("Starting Storm...");
+
+  const reconciled =
+    await reconcileStuckPublishRuns();
+
+  if (reconciled > 0) {
+    console.log(
+      `Reconciled ${reconciled} stuck publish run(s) from previous process.`
+    );
+  }
+
+  startIdleClientSweeper();
 
   await bot.api.deleteWebhook({ drop_pending_updates: true });
 

@@ -3,6 +3,8 @@ import { isAdmin, isOwner } from "../services/admin.js";
 import { getAppSettings, updateAppSetting } from "../services/settings.js";
 import { setAdminAction, getAdminAction, clearAdminAction } from "../services/adminChannels.js";
 import { findUser, grantVip, revokeVip, addAdmin, removeAdmin, getAdmins, getStats } from "../services/adminManagement.js";
+import { getPublishQueueStats } from "../services/publishQueue.js";
+import { getActiveTelegramClientCount } from "../telegram/clientManager.js";
 function adminSettingsKeyboard() {
     return new InlineKeyboard()
         .text("📣 Free المجموعات", "set_fg")
@@ -197,13 +199,19 @@ export async function handleAdminExtraCallback(ctx) {
      */
     if (action === "admin_stats") {
         const stats = await getStats();
+        const queueStats = getPublishQueueStats();
+        const activeClients = getActiveTelegramClientCount();
         await ctx.answerCallbackQuery();
         await ctx.reply("📊 إحصائيات المشروع\n\n" +
             `👥 المستخدمون: ${stats.users}\n` +
             `⭐ VIP: ${stats.vip}\n` +
             `📱 الحسابات: ${stats.accounts}\n` +
             `📣 المجموعات اليدوية: ${stats.groups}\n` +
-            `🚀 عمليات النشر: ${stats.runs}`, {
+            `🚀 عمليات النشر: ${stats.runs}\n\n` +
+            "⚙️ الموارد الحية:\n" +
+            `🔄 تشغيلات شغالة الآن: ${queueStats.running} / ${queueStats.maxConcurrent}\n` +
+            `⏳ تشغيلات بالطابور: ${queueStats.queued}\n` +
+            `📡 اتصالات Telegram مفتوحة: ${activeClients}`, {
             reply_markup: new InlineKeyboard()
                 .text("↩️ لوحة الإدارة", "admin_panel")
         });

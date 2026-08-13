@@ -27,6 +27,14 @@ import {
   getStats
 } from "../services/adminManagement.js";
 
+import {
+  getPublishQueueStats
+} from "../services/publishQueue.js";
+
+import {
+  getActiveTelegramClientCount
+} from "../telegram/clientManager.js";
+
 function adminSettingsKeyboard() {
   return new InlineKeyboard()
     .text(
@@ -448,6 +456,12 @@ export async function handleAdminExtraCallback(
     const stats =
       await getStats();
 
+    const queueStats =
+      getPublishQueueStats();
+
+    const activeClients =
+      getActiveTelegramClientCount();
+
     await ctx.answerCallbackQuery();
 
     await ctx.reply(
@@ -456,7 +470,11 @@ export async function handleAdminExtraCallback(
         `⭐ VIP: ${stats.vip}\n` +
         `📱 الحسابات: ${stats.accounts}\n` +
         `📣 المجموعات اليدوية: ${stats.groups}\n` +
-        `🚀 عمليات النشر: ${stats.runs}`,
+        `🚀 عمليات النشر: ${stats.runs}\n\n` +
+        "⚙️ الموارد الحية:\n" +
+        `🔄 تشغيلات شغالة الآن: ${queueStats.running} / ${queueStats.maxConcurrent}\n` +
+        `⏳ تشغيلات بالطابور: ${queueStats.queued}\n` +
+        `📡 اتصالات Telegram مفتوحة: ${activeClients}`,
       {
         reply_markup:
           new InlineKeyboard()

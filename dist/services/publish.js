@@ -1,5 +1,5 @@
 import { supabase } from "../db/supabase.js";
-import { getTelegramClient } from "../telegram/clientManager.js";
+import { getTelegramClient, touchTelegramClient } from "../telegram/clientManager.js";
 import { getAppSettings } from "./settings.js";
 import { buildPreview } from "./posts.js";
 function errorMessage(error) {
@@ -268,6 +268,7 @@ export async function executePublishCycles(userId, accountId, runId, cycleLimitO
                 await client.sendMessage(inputPeer, {
                     message: text
                 });
+                touchTelegramClient(accountId);
                 cycleSuccess++;
                 totalSuccess++;
             }

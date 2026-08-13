@@ -1,4 +1,4 @@
-import re, sys
+import sys
 
 path = "src/bot/callbacks.ts"
 with open(path, "r", encoding="utf-8") as f:
@@ -100,7 +100,7 @@ new2 = '''      await ctx.reply(
 for old, new, name in [(old1, new1, "منع التشغيل المزدوج"), (old2, new2, "زر الإيقاف")]:
     count = content.count(old)
     if count != 1:
-        print(f"FAILED: pattern for '{name}' found {count} times (expected 1). Aborting, no changes written.")
+        print(f"FAILED: '{name}' found {count} times (expected 1). Aborting, no changes written.")
         sys.exit(1)
     content = content.replace(old, new)
 

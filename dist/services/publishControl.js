@@ -45,3 +45,18 @@ export async function stopPublishRun(userId, runId) {
     }
     return Boolean(data);
 }
+export async function reconcileStuckPublishRuns() {
+    const { data, error } = await supabase
+        .from("publish_runs")
+        .update({
+        status: "failed",
+        finished_at: new Date().toISOString()
+    })
+        .in("status", ["pending", "running"])
+        .select("id");
+    if (error) {
+        console.error("RECONCILE STUCK RUNS ERROR:", error.message);
+        return 0;
+    }
+    return data?.length ?? 0;
+}

@@ -1,4 +1,7 @@
-const MAX_CONCURRENT_JOBS = 5;
+import { env } from "../config/env.js";
+const MAX_CONCURRENT_JOBS = env.MAX_PUBLISH_CONCURRENCY > 0
+    ? env.MAX_PUBLISH_CONCURRENCY
+    : 2;
 let running = 0;
 const queue = [];
 function drain() {

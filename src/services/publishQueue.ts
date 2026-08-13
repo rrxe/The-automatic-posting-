@@ -1,6 +1,11 @@
+import { env } from "../config/env.js";
+
 type Job<T> = () => Promise<T>;
 
-const MAX_CONCURRENT_JOBS = 5;
+const MAX_CONCURRENT_JOBS =
+  env.MAX_PUBLISH_CONCURRENCY > 0
+    ? env.MAX_PUBLISH_CONCURRENCY
+    : 2;
 
 let running = 0;
 
