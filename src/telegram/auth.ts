@@ -30,6 +30,10 @@ interface PendingLogin {
     ((result: LoginStepResult) => void) | null;
 
   error: Error | null;
+
+  isCodeViaApp: boolean | null;
+
+  startedAt: number;
 }
 
 export type LoginStepResult =
@@ -81,6 +85,10 @@ function normalizePhone(
     phone = "+" + phone;
   }
 
+  /*
+   * Accept international phone numbers.
+   * No country is hard-coded here.
+   */
   if (
     !/^\+[1-9]\d{7,14}$/.test(
       phone
@@ -297,20 +305,42 @@ export async function beginLogin(
   pending.error =
     null;
 
+  pending.isCodeViaApp =
+    null;
+
+  pending.startedAt =
+    Date.now();
+
   pendingLogins.set(
     telegramId,
     pending
   );
 
-  /*
-   * teleproto يتولى دورة
-   * تسجيل الدخول كاملة.
-   */
+  console.log(
+    "TELEGRAM LOGIN START:",
+    {
+      telegramId,
+      phonePrefix:
+        cleanPhone.slice(
+          0,
+          Math.min(
+            5,
+            cleanPhone.length
+          )
+        ),
+      phoneLength:
+        cleanPhone.length
+    }
+  );
+
   client
     .start({
       phoneNumber:
         async () =>
           cleanPhone,
+
+      forceSMS:
+        false,
 
       phoneCode:
         async (
@@ -319,17 +349,32 @@ export async function beginLogin(
           pending.status =
             "waiting_code";
 
+          pending.isCodeViaApp =
+            Boolean(
+              isCodeViaApp
+            );
+
           console.log(
             "TELEGRAM LOGIN CODE REQUESTED:",
             {
               telegramId,
+
               isCodeViaApp:
                 Boolean(
                   isCodeViaApp
-                )
+                ),
+
+              delivery:
+                isCodeViaApp
+                  ? "telegram_app"
+                  : "sms_or_non_app"
             }
           );
 
+          /*
+           * Do not expose the actual code
+           * in logs.
+           */
           return new Promise<string>(
             (resolve) => {
               pending.codeResolver =
@@ -369,6 +414,28 @@ export async function beginLogin(
           );
         },
 
+      /*
+       * Some Telegram accounts can require
+       * email verification instead of a phone
+       * code. We don't fake or bypass this.
+       *
+       * Returning a clear error is safer than
+       * hanging the login forever.
+       */
+      emailAddress:
+        async () => {
+          throw new Error(
+            "TELEGRAM_EMAIL_VERIFICATION_REQUIRED"
+          );
+        },
+
+      emailVerification:
+        async () => {
+          throw new Error(
+            "TELEGRAM_EMAIL_VERIFICATION_REQUIRED"
+          );
+        },
+
       onError:
         async (
           error: Error
@@ -378,7 +445,13 @@ export async function beginLogin(
 
           console.error(
             "TELEGRAM LOGIN FLOW ERROR:",
-            error
+            {
+              telegramId,
+              message:
+                error.message,
+              name:
+                error.name
+            }
           );
 
           return false;
@@ -407,6 +480,11 @@ export async function beginLogin(
               account
             }
           );
+
+          console.log(
+            "TELEGRAM LOGIN COMPLETED:",
+            telegramId
+          );
         } catch (error) {
           const finalError =
             error instanceof Error
@@ -432,6 +510,15 @@ export async function beginLogin(
                 "failed",
               error:
                 finalError
+            }
+          );
+
+          console.error(
+            "TELEGRAM SAVE ACCOUNT ERROR:",
+            {
+              telegramId,
+              message:
+                finalError.message
             }
           );
         }
@@ -474,6 +561,17 @@ export async function beginLogin(
           }
         );
 
+        console.error(
+          "TELEGRAM LOGIN FAILED:",
+          {
+            telegramId,
+            message:
+              finalError.message,
+            name:
+              finalError.name
+          }
+        );
+
         await client
           .disconnect()
           .catch(() => {});
@@ -485,14 +583,34 @@ export async function beginLogin(
     );
 
   /*
-   * ننتظر إلى أن نعرف أن
-   * الكود صار مطلوباً.
+   * Wait until teleproto actually asks us
+   * for the verification code.
    */
+  const startWaitTimeout =
+    90_000;
+
+  const startedAt =
+    Date.now();
+
   while (
     pending.codeResolver === null &&
     pending.status ===
       "waiting_code"
   ) {
+    if (
+      Date.now() -
+        startedAt >
+      startWaitTimeout
+    ) {
+      cancelLogin(
+        telegramId
+      );
+
+      throw new Error(
+        "TELEGRAM_CODE_REQUEST_TIMEOUT"
+      );
+    }
+
     await new Promise(
       (resolve) =>
         setTimeout(
@@ -503,7 +621,10 @@ export async function beginLogin(
   }
 
   return {
-    deliveredToApp: true
+    deliveredToApp:
+      Boolean(
+        pending.isCodeViaApp
+      )
   };
 }
 
@@ -552,11 +673,11 @@ export async function submitLoginCode(
   );
 
   /*
-   * ننتظر حتى:
+   * Wait for:
    *
-   * 1. يطلب 2FA
-   * 2. ينجح التسجيل
-   * 3. يفشل التسجيل
+   * 1. 2FA password
+   * 2. successful login
+   * 3. login failure
    */
   return new Promise(
     (resolve) => {
@@ -624,9 +745,14 @@ export function cancelLogin(
   }
 
   try {
-    pending.codeResolver = null;
-    pending.passwordResolver = null;
-    pending.waitResolver = null;
+    pending.codeResolver =
+      null;
+
+    pending.passwordResolver =
+      null;
+
+    pending.waitResolver =
+      null;
   } catch {}
 
   pending.client

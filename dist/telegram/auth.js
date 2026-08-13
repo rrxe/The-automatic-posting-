@@ -137,30 +137,12 @@ export async function beginLogin(stormUserId, telegramId, phone) {
     console.log("TELEGRAM LOGIN START:", {
         telegramId,
         phonePrefix: cleanPhone.slice(0, Math.min(5, cleanPhone.length)),
-        phoneLength: cleanPhone.length,
-        forceSMS: true
+        phoneLength: cleanPhone.length
     });
-    /*
-     * teleproto internally uses:
-     *
-     * auth.sendCode(...)
-     *
-     * and when forceSMS=true and Telegram
-     * initially returns an app code, teleproto
-     * attempts auth.resendCode(...).
-     *
-     * This gives us the strongest official
-     * SMS-capable flow available to a third-party
-     * Telegram client.
-     */
     client
         .start({
         phoneNumber: async () => cleanPhone,
-        /*
-         * IMPORTANT:
-         * Ask teleproto/Telegram to prefer SMS.
-         */
-        forceSMS: true,
+        forceSMS: false,
         phoneCode: async (isCodeViaApp) => {
             pending.status =
                 "waiting_code";
