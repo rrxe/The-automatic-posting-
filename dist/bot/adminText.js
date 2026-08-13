@@ -98,7 +98,7 @@ export async function handleAdminText(ctx) {
                 "INVALID_PHONE") {
                 await ctx.reply("❌ رقم الهاتف غير صحيح.\n\n" +
                     "مثال:\n" +
-                    "+9647518828627");
+                    "964******");
                 return;
             }
             if (message ===

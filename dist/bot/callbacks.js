@@ -787,7 +787,7 @@ export async function handleCallbacks(ctx) {
             await ctx.reply("➕ إضافة حساب Telegram\n\n" +
                 "أرسل رقم الحساب بالصيغة الدولية.\n\n" +
                 "مثال:\n" +
-                "+9647518828627");
+                "964******");
             break;
         }
         case "groups":
