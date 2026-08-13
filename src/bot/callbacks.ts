@@ -1671,7 +1671,8 @@ export async function handleCallbacks(
 
           async (
             image,
-            expires
+            expires,
+            deepLink
           ) => {
             if (
               lastQrMessageId !== null
@@ -1707,7 +1708,13 @@ export async function handleCallbacks(
                     "🔐 امسح هذا QR لتسجيل حساب Telegram.\n\n" +
                     "📱 Telegram → الإعدادات → الأجهزة → إضافة جهاز\n\n" +
                     `⏳ صالح تقريبًا ${remaining} ثانية.\n` +
-                    "إذا انتهت صلاحيته سيظهر QR جديد تلقائيًا."
+                    "يمكنك أيضًا استخدام زر فتح Telegram أدناه.\n" +
+                    "إذا انتهت صلاحية هذا الرابط سيظهر QR جديد تلقائيًا.",
+                  reply_markup:
+                    new InlineKeyboard().url(
+                      "🔗 فتح رابط Telegram",
+                      deepLink
+                    )
                 }
               );
 

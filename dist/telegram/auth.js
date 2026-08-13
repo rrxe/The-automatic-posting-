@@ -437,7 +437,7 @@ export async function beginQrLogin(stormUserId, telegramId, onQr, onStatus) {
                 margin: 2,
                 errorCorrectionLevel: "M"
             });
-            await onQr(image, expires);
+            await onQr(image, expires, deepLink);
             if (!firstQrSent) {
                 firstQrSent =
                     true;

@@ -788,7 +788,8 @@ export async function beginQrLogin(
   telegramId: number,
   onQr: (
     image: Buffer,
-    expires: number
+    expires: number,
+    deepLink: string
   ) => Promise<void>,
   onStatus: (
     status: QrLoginStatus,
@@ -964,7 +965,8 @@ export async function beginQrLogin(
 
             await onQr(
               image,
-              expires
+              expires,
+              deepLink
             );
 
             if (

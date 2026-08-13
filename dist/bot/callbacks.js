@@ -796,7 +796,7 @@ export async function handleCallbacks(ctx) {
             const currentTelegramId = ctx.from.id;
             let lastQrMessageId = null;
             try {
-                await beginQrLogin(user.id, currentTelegramId, async (image, expires) => {
+                await beginQrLogin(user.id, currentTelegramId, async (image, expires, deepLink) => {
                     if (lastQrMessageId !== null) {
                         await ctx.api
                             .deleteMessage(currentTelegramId, lastQrMessageId)
@@ -808,7 +808,9 @@ export async function handleCallbacks(ctx) {
                         caption: "🔐 امسح هذا QR لتسجيل حساب Telegram.\n\n" +
                             "📱 Telegram → الإعدادات → الأجهزة → إضافة جهاز\n\n" +
                             `⏳ صالح تقريبًا ${remaining} ثانية.\n` +
-                            "إذا انتهت صلاحيته سيظهر QR جديد تلقائيًا."
+                            "يمكنك أيضًا استخدام زر فتح Telegram أدناه.\n" +
+                            "إذا انتهت صلاحية هذا الرابط سيظهر QR جديد تلقائيًا.",
+                        reply_markup: new InlineKeyboard().url("🔗 فتح رابط Telegram", deepLink)
                     });
                     lastQrMessageId =
                         sent.message_id;
