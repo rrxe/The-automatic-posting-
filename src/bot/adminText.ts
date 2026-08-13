@@ -185,11 +185,12 @@ export async function handleAdminText(
         return;
       }
 
-      await beginLogin(
-        user.id,
-        telegramId,
-        text
-      );
+      const loginInfo =
+        await beginLogin(
+          user.id,
+          telegramId,
+          text
+        );
 
       /*
        * لا نمسح الحالة.
@@ -201,12 +202,25 @@ export async function handleAdminText(
         "telegram_code"
       );
 
+      const deliveryMessage =
+        loginInfo.deliveredToApp
+          ? (
+              "📨 تم طلب رمز تسجيل الدخول عبر Telegram.\n\n" +
+              "📱 افتح Telegram على الجهاز الذي يوجد عليه الحساب، " +
+              "وابحث عن رسالة تسجيل الدخول من Telegram.\n\n" +
+              "⚠️ قد لا يصل الرمز عبر SMS في هذه الحالة."
+            )
+          : (
+              "📲 تم طلب رمز تسجيل الدخول.\n\n" +
+              "تحقق من SMS وأي وسيلة تحقق يعرضها Telegram لهذا الرقم."
+            );
+
       await ctx.reply(
-        "📨 تم إرسال رمز تسجيل الدخول.\n\n" +
-        "أرسل الرمز بهذا الشكل:\n\n" +
+        deliveryMessage +
+        "\n\n" +
+        "🔢 عند وصول الرمز أرسله هنا بهذا الشكل:\n" +
         "4 7 0 9 8\n\n" +
-        "🔐 أرسل كل رقم منفصلاً بمسافة.\n" +
-        "ولا تشارك الرمز مع أي شخص."
+        "🔐 لا تشارك رمز Telegram مع أي شخص."
       );
     } catch (error) {
       const message =
