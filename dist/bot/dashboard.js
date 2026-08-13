@@ -3,6 +3,7 @@ import { getUserByTelegramId } from "../services/users.js";
 import { getAppSettings } from "../services/settings.js";
 import { getUserTelegramAccounts } from "../telegram/clientManager.js";
 import { getDailyPublishCount } from "../services/posts.js";
+import { getActiveRunForUser } from "../services/publishControl.js";
 export async function sendDashboard(ctx) {
     if (!ctx.from)
         return;
@@ -37,9 +38,19 @@ export async function sendDashboard(ctx) {
     const displayedUsed = Math.min(dailyUsed, dailyLimit);
     const dailyRemaining = Math.max(0, dailyLimit - dailyUsed);
     const accounts = await getUserTelegramAccounts(user.id);
-    const keyboard = new InlineKeyboard()
-        .text("▶️ تشغيل", "run_publish")
-        .row()
+    const activeRun = await getActiveRunForUser(user.id);
+    const keyboard = new InlineKeyboard();
+    if (activeRun) {
+        keyboard
+            .text("⏹ إيقاف التشغيل", `stop:${activeRun.id}`)
+            .row();
+    }
+    else {
+        keyboard
+            .text("▶️ تشغيل", "run_publish")
+            .row();
+    }
+    keyboard
         .text("➕ إضافة حساب", "account_add")
         .row()
         .text("✍️ إنشاء منشور", "create_message")

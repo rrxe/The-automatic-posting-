@@ -17,6 +17,10 @@ import {
   getDailyPublishCount
 } from "../services/posts.js";
 
+import {
+  getActiveRunForUser
+} from "../services/publishControl.js";
+
 export async function sendDashboard(
   ctx: BotContext
 ) {
@@ -91,13 +95,31 @@ export async function sendDashboard(
       user.id
     );
 
+  const activeRun =
+    await getActiveRunForUser(
+      user.id
+    );
+
   const keyboard =
-    new InlineKeyboard()
+    new InlineKeyboard();
+
+  if (activeRun) {
+    keyboard
+      .text(
+        "⏹ إيقاف التشغيل",
+        `stop:${activeRun.id}`
+      )
+      .row();
+  } else {
+    keyboard
       .text(
         "▶️ تشغيل",
         "run_publish"
       )
-      .row()
+      .row();
+  }
+
+  keyboard
       .text(
         "➕ إضافة حساب",
         "account_add"

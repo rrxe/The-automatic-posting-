@@ -205,80 +205,12 @@ export async function handleCallbacks(ctx) {
         await deleteSavedMessage(ctx, action.slice(5));
         return;
     }
-    if (action?.startsWith("pdelay:")) {
-        const parts = action.split(":");
-        const messageId = parts[1];
-        const delay = Number(parts[2]);
-        if (![2, 5, 7].includes(delay)) {
-            await ctx.answerCallbackQuery({
-                text: "❌ قيمة التأخير غير صالحة.",
-                show_alert: true
-            });
-            return;
-        }
-        const { getUserByTelegramId } = await import("../services/users.js");
-        const { getAppSettings } = await import("../services/settings.js");
-        const { supabase } = await import("../db/supabase.js");
-        const { getUserTelegramAccounts } = await import("../telegram/clientManager.js");
-        const user = await getUserByTelegramId(ctx.from.id);
-        if (!user) {
-            return;
-        }
-        const { data: message } = await supabase
-            .from("messages")
-            .select("id, content, telegram_account_id")
-            .eq("id", messageId)
-            .eq("user_id", user.id)
-            .single();
-        if (!message) {
-            await ctx.answerCallbackQuery({
-                text: "❌ المنشور غير موجود.",
-                show_alert: true
-            });
-            return;
-        }
-        const settings = await getAppSettings();
-        const vip = user.plan === "vip" &&
-            !!user.vip_expires_at &&
-            new Date(user.vip_expires_at) > new Date();
-        const cycleLimit = vip
-            ? settings.vip_cycle_limit
-            : settings.free_cycle_limit;
-        const accounts = await getUserTelegramAccounts(user.id);
-        const account = accounts.find((item) => item.id ===
-            message.telegram_account_id);
-        const accountName = account?.username
-            ? `@${account.username}`
-            : account?.display_name ||
-                account?.phone_hint ||
-                "الحساب";
-        await ctx.answerCallbackQuery({
-            text: `✅ تم اختيار ${delay} دقائق.`
-        });
-        await ctx.reply("🚀 إعداد التشغيل\n\n" +
-            `📱 الحساب: ${accountName}\n` +
-            `📝 المنشور: ${String(message.content).slice(0, 80)}\n\n` +
-            `🔄 عدد الدورات: ${cycleLimit}\n` +
-            `⏱ الانتظار بين الدورات: ${delay} دقائق\n\n` +
-            "كل دورة ترسل المنشور إلى جميع الوجهات المختارة.", {
-            reply_markup: new InlineKeyboard()
-                .text(`2 دقائق${delay === 2 ? " ✅" : ""}`, `pdelay:${messageId}:2`)
-                .text(`5 دقائق${delay === 5 ? " ✅" : ""}`, `pdelay:${messageId}:5`)
-                .text(`7 دقائق${delay === 7 ? " ✅" : ""}`, `pdelay:${messageId}:7`)
-                .row()
-                .text("🚀 بدء التشغيل", `pstart:${messageId}:${delay}`)
-                .row()
-                .text("↩️ المنشور", `pm:${messageId}`)
-                .row()
-                .text("🏠 الرئيسية", "dashboard")
-        });
-        return;
-    }
     if (action?.startsWith("pstart:")) {
         const parts = action.split(":");
         const messageId = parts[1];
         const delay = Number(parts[2]);
-        if (![2, 5, 7].includes(delay)) {
+        if (!Number.isFinite(delay) ||
+            delay <= 0) {
             await ctx.answerCallbackQuery({
                 text: "❌ قيمة التأخير غير صالحة.",
                 show_alert: true
@@ -303,6 +235,15 @@ export async function handleCallbacks(ctx) {
         if (!message) {
             await ctx.answerCallbackQuery({
                 text: "❌ المنشور غير موجود.",
+                show_alert: true
+            });
+            return;
+        }
+        const { hasActiveRun } = await import("../services/publishControl.js");
+        const alreadyRunning = await hasActiveRun(user.id, message.telegram_account_id);
+        if (alreadyRunning) {
+            await ctx.answerCallbackQuery({
+                text: "⚠️ يوجد تشغيل قيد التنفيذ بالفعل لهذا الحساب. أوقفه أولاً قبل بدء تشغيل جديد.",
                 show_alert: true
             });
             return;
@@ -358,8 +299,11 @@ export async function handleCallbacks(ctx) {
                 `🔄 الدورات: ${cycleLimit}\n` +
                 `⏱ الانتظار بين الدورات: ${delay} دقائق\n` +
                 `📣 الوجهات: ${groups.length}\n\n` +
-                "كل دورة ترسل إلى جميع الوجهات المختارة.", {
+                "كل دورة ترسل إلى جميع الوجهات المختارة.\n" +
+                "يمكنك إيقاف العملية الحالية من الزر أدناه.", {
                 reply_markup: new InlineKeyboard()
+                    .text("⏹ إيقاف", `stop:${run.runId}`)
+                    .row()
                     .text("🏠 الرئيسية", "dashboard")
             });
             void enqueuePublish(() => executePublishCycles(user.id, message.telegram_account_id, run.runId, cycleLimit, delay))
@@ -494,14 +438,10 @@ export async function handleCallbacks(ctx) {
         await ctx.reply("🚀 إعداد التشغيل\n\n" +
             `📱 الحساب: ${accountName}\n` +
             `📝 المنشور: ${String(message.content).slice(0, 80)}\n\n` +
-            `🔄 عدد الدورات: ${cycleLimit}\n\n` +
+            `🔄 عدد الدورات: ${cycleLimit}\n` +
             `⏱ الانتظار بين الدورات: ${defaultDelay} دقائق\n\n` +
-            "اختر الانتظار بين الدورات:", {
+            "كل دورة ترسل المنشور إلى جميع الوجهات المختارة.", {
             reply_markup: new InlineKeyboard()
-                .text(`2 دقائق${defaultDelay === 2 ? " ✅" : ""}`, `pdelay:${messageId}:2`)
-                .text(`5 دقائق${defaultDelay === 5 ? " ✅" : ""}`, `pdelay:${messageId}:5`)
-                .text(`7 دقائق${defaultDelay === 7 ? " ✅" : ""}`, `pdelay:${messageId}:7`)
-                .row()
                 .text("🚀 بدء التشغيل", `pstart:${messageId}:${defaultDelay}`)
                 .row()
                 .text("↩️ المنشور", `pm:${messageId}`)
