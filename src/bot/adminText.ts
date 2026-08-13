@@ -229,7 +229,7 @@ export async function handleAdminText(
         await ctx.reply(
           "❌ رقم الهاتف غير صحيح.\n\n" +
           "مثال:\n" +
-          "+9647518828627"
+          "964******"
         );
         return;
       }

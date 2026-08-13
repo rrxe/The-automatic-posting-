@@ -800,7 +800,7 @@ export async function handleCallbacks(
 " +
         "مثال:
 " +
-        "+9647518828627"
+        "964******"
       );
 
       break;
