@@ -1,5 +1,6 @@
 import { TelegramClient } from "teleproto";
 import { StringSession } from "teleproto/sessions/index.js";
+import * as QRCode from "qrcode";
 import { env } from "../config/env.js";
 import { supabase } from "../db/supabase.js";
 import { encrypt } from "../utils/crypto.js";
@@ -351,4 +352,146 @@ export function cancelLogin(telegramId) {
 }
 export function hasPendingLogin(telegramId) {
     return pendingLogins.has(telegramId);
+}
+export async function beginQrLogin(stormUserId, telegramId, onQr, onStatus) {
+    assertTelegramConfig();
+    cancelLogin(telegramId);
+    const client = new TelegramClient(new StringSession(""), env.TELEGRAM_API_ID, env.TELEGRAM_API_HASH, {
+        connectionRetries: 5
+    });
+    await client.connect();
+    const pending = {};
+    pending.client =
+        client;
+    pending.stormUserId =
+        stormUserId;
+    /*
+     * QR login does not require a phone.
+     * We keep an empty value so the existing
+     * account-saving structure remains compatible.
+     */
+    pending.phone =
+        "";
+    pending.status =
+        "waiting_code";
+    pending.codeResolver =
+        null;
+    pending.passwordResolver =
+        null;
+    pending.waitResolver =
+        null;
+    pending.error =
+        null;
+    pending.isCodeViaApp =
+        null;
+    pending.startedAt =
+        Date.now();
+    pendingLogins.set(telegramId, pending);
+    let firstQrSent = false;
+    let firstQrResolve = null;
+    let firstQrReject = null;
+    const firstQr = new Promise((resolve, reject) => {
+        firstQrResolve =
+            resolve;
+        firstQrReject =
+            reject;
+    });
+    const finishLogin = async () => {
+        try {
+            const account = await saveTelegramAccount(pending);
+            pending.status =
+                "completed";
+            await clearUserAction(telegramId);
+            await onStatus("completed");
+            return account;
+        }
+        catch (error) {
+            const finalError = error instanceof Error
+                ? error
+                : new Error(String(error));
+            pending.status =
+                "failed";
+            pending.error =
+                finalError;
+            await clearUserAction(telegramId);
+            await onStatus("failed", finalError.message);
+            throw finalError;
+        }
+        finally {
+            await client
+                .disconnect()
+                .catch(() => { });
+            pendingLogins.delete(telegramId);
+        }
+    };
+    client
+        .signInUserWithQrCode({
+        apiId: env.TELEGRAM_API_ID,
+        apiHash: env.TELEGRAM_API_HASH
+    }, {
+        qrCode: async ({ token, expires }) => {
+            const deepLink = `tg://login?token=${token.toString("base64url")}`;
+            const image = await QRCode.toBuffer(deepLink, {
+                type: "png",
+                width: 720,
+                margin: 2,
+                errorCorrectionLevel: "M"
+            });
+            await onQr(image, expires);
+            if (!firstQrSent) {
+                firstQrSent =
+                    true;
+                firstQrResolve?.();
+                firstQrResolve =
+                    null;
+                firstQrReject =
+                    null;
+            }
+        },
+        password: async (hint) => {
+            pending.status =
+                "waiting_password";
+            await setUserAction(telegramId, "telegram_password");
+            await onStatus("password", hint);
+            return new Promise((resolve) => {
+                pending.passwordResolver =
+                    resolve;
+            });
+        },
+        onError: async (error) => {
+            pending.error =
+                error;
+            console.error("TELEGRAM QR LOGIN ERROR:", {
+                telegramId,
+                message: error.message,
+                name: error.name
+            });
+            return false;
+        }
+    })
+        .then(finishLogin)
+        .catch(async (error) => {
+        const finalError = error instanceof Error
+            ? error
+            : new Error(String(error));
+        pending.status =
+            "failed";
+        pending.error =
+            finalError;
+        if (!firstQrSent) {
+            firstQrReject?.(finalError);
+        }
+        await clearUserAction(telegramId).catch(() => { });
+        await onStatus("failed", finalError.message);
+        await client
+            .disconnect()
+            .catch(() => { });
+        pendingLogins.delete(telegramId);
+    });
+    /*
+     * Wait only until the first QR has
+     * actually been generated and sent.
+     * The real login continues in background.
+     */
+    await firstQr;
 }
