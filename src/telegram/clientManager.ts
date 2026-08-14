@@ -34,10 +34,20 @@ function createTelegramClient(session: string = "") {
     }
   };
 
-  if (env.TELEGRAM_PROXY_HOST && env.TELEGRAM_PROXY_PORT) {
-    const proxyUrl = `socks5://${env.TELEGRAM_PROXY_USERNAME || ""}:${env.TELEGRAM_PROXY_PASSWORD || ""}@${env.TELEGRAM_PROXY_HOST}:${env.TELEGRAM_PROXY_PORT}`;
-    options.proxy = new SocksProxyAgent(proxyUrl);
-    console.log("Telegram client using proxy (hidden credentials)");
+  // إضافة بروكسي فقط إذا كان المضيف والمنفذ غير فارغين
+  const proxyHost = env.TELEGRAM_PROXY_HOST?.trim();
+  const proxyPort = env.TELEGRAM_PROXY_PORT?.trim();
+  if (proxyHost && proxyPort) {
+    const username = env.TELEGRAM_PROXY_USERNAME?.trim() || "";
+    const password = env.TELEGRAM_PROXY_PASSWORD?.trim() || "";
+    const auth = username || password ? `${username}:${password}@` : "";
+    const proxyUrl = `socks5://${auth}${proxyHost}:${proxyPort}`;
+    try {
+      options.proxy = new SocksProxyAgent(proxyUrl);
+      console.log("Telegram client using proxy (credentials hidden)");
+    } catch (err) {
+      console.warn("Invalid proxy configuration, skipping proxy:", err);
+    }
   }
 
   return new TelegramClient(
