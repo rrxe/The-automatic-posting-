@@ -269,7 +269,7 @@ export async function handleCallbacks(ctx: BotContext) {
 
   if (action?.startsWith("md:")) {
     const parts = action.split(":");
-    await detachManualGroup(ctx, parts[1], parts[2]);
+    await detachManualGroup(ctx, parts[1], Number(parts[2]));
     return;
   }
 
@@ -1073,6 +1073,11 @@ if (action === "admin_admins") {
        * بدل ما نراجع كل الملف من الأول.
        */
       console.error("UNHANDLED CALLBACK ACTION:", action);
-      await ctx.reply("⚠️ هذا الخيار غير متاح حالياً.");
+      await ctx.reply(
+        "⚠️ هذا الخيار غير متاح حالياً.\n\n" +
+          "🔍 معرّف الزر: `" + action + "`\n\n" +
+          "ابعت هالنص لصاحب البوت حتى يصلحه.",
+        { parse_mode: "Markdown" }
+      );
   }
 }
