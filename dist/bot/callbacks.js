@@ -1,6 +1,7 @@
 import { InlineKeyboard } from "grammy";
 import { bot } from "./index.js";
 import { sendDashboard } from "./dashboard.js";
+import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
 import { getUserTelegramAccounts } from "../telegram/clientManager.js";
 import { getUserByTelegramId } from "../services/users.js";
@@ -97,6 +98,7 @@ async function showDeleteChannels(ctx) {
     });
 }
 export async function handleCallbacks(ctx) {
+    await deleteCurrentScreen(ctx);
     const callback = ctx.callbackQuery;
     if (!callback || !ctx.from) {
         return;
@@ -106,39 +108,6 @@ export async function handleCallbacks(ctx) {
         return;
     }
     if (await handleAccountGroupCallback(ctx)) {
-        return;
-    }
-    if (action === "account_add") {
-        const user = await getUserByTelegramId(ctx.from.id);
-        if (!user) {
-            await ctx.reply("❌ تعذر العثور على حسابك.");
-            return;
-        }
-        const settings = await getAppSettings();
-        const vip = user.plan === "vip" &&
-            !!user.vip_expires_at &&
-            new Date(user.vip_expires_at) > new Date();
-        const accountLimit = vip
-            ? settings.vip_account_limit
-            : settings.free_account_limit;
-        const accounts = await getUserTelegramAccounts(user.id);
-        if (accounts.length >=
-            accountLimit) {
-            await ctx.answerCallbackQuery({
-                text: "⚠️ وصلت إلى الحد المسموح للحسابات.",
-                show_alert: true
-            }).catch(() => { });
-            await ctx.reply("⚠️ وصلت إلى حد الحسابات في باقتك.\n\n" +
-                "Free: حسابان فقط\n" +
-                "VIP: حتى 5 حسابات.");
-            return;
-        }
-        // بدء تسجيل الدخول بالرقم (بدون QR)
-        await startUserActionExclusive(ctx.from.id, "telegram_phone");
-        await ctx.answerCallbackQuery();
-        await ctx.reply("📱 إضافة حساب Telegram\n\n" +
-            "أرسل رقم هاتفك بالصيغة الدولية (مثال: +9647XXXXXXXX).\n\n" +
-            "سيتم إرسال رمز التحقق عبر تطبيق Telegram نفسه (وليس SMS) لتسجيل الدخول بسرعة وأمان.");
         return;
     }
     if (action === "create_message") {
@@ -441,6 +410,39 @@ export async function handleCallbacks(ctx) {
         return;
     }
     switch (action) {
+        case "account_add": {
+            const user = await getUserByTelegramId(ctx.from.id);
+            if (!user) {
+                await ctx.reply("❌ تعذر العثور على حسابك.");
+                return;
+            }
+            const settings = await getAppSettings();
+            const vip = user.plan === "vip" &&
+                !!user.vip_expires_at &&
+                new Date(user.vip_expires_at) > new Date();
+            const accountLimit = vip
+                ? settings.vip_account_limit
+                : settings.free_account_limit;
+            const accounts = await getUserTelegramAccounts(user.id);
+            if (accounts.length >=
+                accountLimit) {
+                await ctx.answerCallbackQuery({
+                    text: "⚠️ وصلت إلى الحد المسموح للحسابات.",
+                    show_alert: true
+                }).catch(() => { });
+                await ctx.reply("⚠️ وصلت إلى حد الحسابات في باقتك.\n\n" +
+                    "Free: حسابان فقط\n" +
+                    "VIP: حتى 5 حسابات.");
+                return;
+            }
+            // بدء تسجيل الدخول بالرقم (بدون QR)
+            await startUserActionExclusive(ctx.from.id, "telegram_phone");
+            await ctx.answerCallbackQuery();
+            await ctx.reply("📱 إضافة حساب Telegram\n\n" +
+                "أرسل رقم هاتفك بالصيغة الدولية (مثال: +9647XXXXXXXX).\n\n" +
+                "سيتم إرسال رمز التحقق عبر تطبيق Telegram نفسه (وليس SMS) لتسجيل الدخول بسرعة وأمان.");
+            return;
+        }
         case "groups":
             await ctx.reply("📣 مجموعاتي\n\n" +
                 "بعد ربط حسابك ستظهر المجموعات هنا.");
