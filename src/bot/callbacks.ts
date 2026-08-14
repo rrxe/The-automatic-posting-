@@ -547,6 +547,59 @@ export async function handleCallbacks(ctx: BotContext) {
     return;
   }
 
+  /*
+   * ac: زر "➕ إضافة مجموعة" يطلع من chooseSavedMessage
+   * (messageComposer.ts) وقت ما الحساب ما إله ولا مجموعة مضافة
+   * بعد. كان بدون معالج هون، فكان يفلت لآخر default تحت ويطلع
+   * "هذا الخيار غير متاح حالياً". هون منبدأ نفس تدفق add_chat:
+   * الموجود أصلاً بـ adminText.ts.
+   */
+  if (action?.startsWith("ac:")) {
+    const accountId = action.slice(3);
+
+    await startUserActionExclusive(ctx.from.id, `add_chat:${accountId}`);
+    await ctx.answerCallbackQuery();
+
+    await ctx.reply(
+      "➕ إضافة مجموعة\n\n" +
+        "أرسل Username المجموعة أو رابط الدعوة.\n\n" +
+        "مثال:\n" +
+        "@MyGroup\n\n" +
+        "سيتم التحقق من المجموعة قبل طلب تأكيدك للانضمام."
+    );
+
+    return;
+  }
+
+  /*
+   * ag: زر "📣 مجموعاتي" من نفس الشاشة (chooseSavedMessage).
+   * showManualGroups مستوردة فوق أصلاً من manualGroups.js
+   * وما كانت مستخدمة بأي مكان — هاد هو المكان الصحيح إلها،
+   * بنفس نمط mg:/md: تحت.
+   */
+  if (action?.startsWith("ag:")) {
+    await showManualGroups(ctx, action.slice(3));
+    return;
+  }
+
+  /*
+   * chat_cancel: زر "❌ إلغاء" يطلع من adminText.ts بعد ما يبعث
+   * المستخدم يوزرنيم/رابط المجموعة (شاشة تأكيد إضافة المجموعة).
+   * ملاحظة: chat_confirm ("✅ إضافة والانضمام") لسا بدون معالج —
+   * لازم أشوف services/chatAdd.ts لأعرف اسم الدالة يلي بتكمل
+   * الانضمام الفعلي قبل ما أضيفه، حتى ما أخمّن اسم export مش موجود.
+   */
+  if (action === "chat_cancel") {
+    const { cancelChatAdd } = await import("../services/chatAdd.js");
+    cancelChatAdd(ctx.from.id);
+
+    await clearUserAction(ctx.from.id);
+    await ctx.answerCallbackQuery();
+
+    await ctx.reply("❌ تم إلغاء إضافة المجموعة.");
+    return;
+  }
+
   if (action === "publish_history") {
     await ctx.answerCallbackQuery();
     await postHistory(ctx);
@@ -938,6 +991,7 @@ export async function handleCallbacks(ctx: BotContext) {
 
       break;
     }
+
 
     case "groups":
       await ctx.reply("📣 مجموعاتي\n\n" + "بعد ربط حسابك ستظهر المجموعات هنا.");
