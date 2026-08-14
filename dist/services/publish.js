@@ -12,6 +12,16 @@ function isFloodWait(error) {
     return (message.includes("FLOOD_WAIT") ||
         message.includes("FloodWait"));
 }
+function isAccountRestricted(error) {
+    const message = errorMessage(error);
+    return (message.includes("banned from sending messages") ||
+        message.includes("USER_BANNED_IN_CHANNEL") ||
+        message.includes("CHAT_WRITE_FORBIDDEN") ||
+        message.includes("AUTH_KEY_UNREGISTERED") ||
+        message.includes("AuthKeyUnregistered") ||
+        message.includes("SESSION_REVOKED") ||
+        message.includes("USER_DEACTIVATED"));
+}
 function sleep(minutes) {
     const ms = Math.max(0, minutes) *
         60 *
@@ -133,7 +143,24 @@ export async function createPublishRun(userId, accountId, messageId, selectedGro
     };
 }
 export async function executePublishCycles(userId, accountId, runId, cycleLimitOverride, cycleDelayOverride) {
-    const client = await getTelegramClient(accountId);
+    let client;
+    try {
+        client =
+            await getTelegramClient(accountId);
+    }
+    catch (error) {
+        if (errorMessage(error).includes("TELEGRAM_SESSION_EXPIRED")) {
+            await supabase
+                .from("telegram_accounts")
+                .update({
+                is_active: false
+            })
+                .eq("id", accountId);
+            throw new Error("⚠️ انتهت صلاحية جلسة هذا الحساب على Telegram.\n\n" +
+                "تمت إزالته تلقائياً من حساباتك — أضفه من جديد من «➕ إضافة حساب» لمتابعة النشر.");
+        }
+        throw error;
+    }
     const { data: run, error: runError } = await supabase
         .from("publish_runs")
         .select(`
@@ -285,6 +312,22 @@ export async function executePublishCycles(userId, accountId, runId, cycleLimitO
                     error: errorMessage(error)
                 });
                 if (isFloodWait(error)) {
+                    await supabase
+                        .from("publish_runs")
+                        .update({
+                        status: "cancelled"
+                    })
+                        .eq("id", runId);
+                    stopped = true;
+                    break;
+                }
+                if (isAccountRestricted(error)) {
+                    await supabase
+                        .from("telegram_accounts")
+                        .update({
+                        is_active: false
+                    })
+                        .eq("id", accountId);
                     await supabase
                         .from("publish_runs")
                         .update({

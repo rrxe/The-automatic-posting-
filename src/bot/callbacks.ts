@@ -962,29 +962,19 @@ if (action === "admin_admins") {
         break;
       }
 
-      const settings = await getAppSettings();
-
-      const vip =
-        user.plan === "vip" &&
-        !!user.vip_expires_at &&
-        new Date(user.vip_expires_at) > new Date();
-
-      const accountLimit = vip ? settings.vip_account_limit : settings.free_account_limit;
-
       const accounts = await getUserTelegramAccounts(user.id);
 
-      if (accounts.length >= accountLimit) {
+      if (accounts.length >= 1) {
         await ctx
           .answerCallbackQuery({
-            text: "⚠️ وصلت إلى الحد المسموح للحسابات.",
+            text: "⚠️ عندك حساب مربوط بالفعل.",
             show_alert: true
           })
           .catch(() => {});
 
         await ctx.reply(
-          "⚠️ وصلت إلى حد الحسابات في باقتك.\n\n" +
-            "Free: حسابان فقط\n" +
-            "VIP: حتى 5 حسابات."
+          "⚠️ يُسمح بربط حساب Telegram واحد فقط لكل مستخدم.\n\n" +
+            "لو تريد تربط حساب ثاني، احذف الحساب الحالي أولاً من «⚙️ حسابي»."
         );
 
         break;

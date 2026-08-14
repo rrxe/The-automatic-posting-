@@ -142,43 +142,26 @@ export async function confirmChatAdd(telegramId) {
     const parsed = parseInput(item.input);
     const client = await getTelegramClient(item.accountId);
     let entity = null;
-    let joined = false;
+    const joined = false;
     if (parsed.type ===
         "invite") {
-        const result = await client.invoke(new Api.messages.ImportChatInvite({
+        const preview = await client.invoke(new Api.messages.CheckChatInvite({
             hash: parsed.value
         }));
-        const chats = "chats" in result
-            ? result.chats
-            : [];
-        entity =
-            Array.isArray(chats)
-                ? chats[0]
-                : null;
-        joined =
-            true;
+        if ("chat" in preview &&
+            preview.chat) {
+            entity =
+                preview.chat;
+        }
+        else {
+            throw new Error("JOIN_MANUALLY_FIRST");
+        }
     }
     else {
         entity =
             await client.getEntity(parsed.value);
         if (!entity) {
             throw new Error("CHAT_NOT_FOUND");
-        }
-        if (entity
-            .className ===
-            "Channel") {
-            try {
-                await client.invoke(new Api.channels.JoinChannel({
-                    channel: await client.getInputEntity(entity)
-                }));
-                joined =
-                    true;
-            }
-            catch (error) {
-                console.log("JOIN NOTICE:", error instanceof Error
-                    ? error.message
-                    : String(error));
-            }
         }
     }
     if (!entity) {

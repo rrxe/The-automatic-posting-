@@ -60,11 +60,11 @@ export async function handleAdminText(ctx: BotContext) {
           `📣 ${result.title}` +
           (result.username ? `\n🔗 ${result.username}` : "") +
           "\n\n" +
-          "هل تريد إضافة هذه المجموعة للحساب؟\n" +
-          "لن يتم الانضمام إلا بعد تأكيدك.",
+          "هل تريد حفظ هذه المجموعة عند حسابك؟\n" +
+          "⚠️ لازم يكون الحساب منضم لها فعلاً (يدوياً من التطبيق) — البوت ما يحاول الانضمام تلقائياً.",
         {
           reply_markup: new InlineKeyboard()
-            .text("✅ إضافة والانضمام", "chat_confirm")
+            .text("✅ حفظ المجموعة", "chat_confirm")
             .row()
             .text("❌ إلغاء", "chat_cancel")
         }
