@@ -446,8 +446,7 @@ export async function handleCallbacks(ctx: BotContext) {
 
     return;
   }
-
-  if (action?.startsWith("publish_saved:")) {
+if (action?.startsWith("publish_saved:")) {
     const messageId = action.slice("publish_saved:".length);
 
     const { getUserByTelegramId } = await import("../services/users.js");
@@ -659,9 +658,13 @@ export async function handleCallbacks(ctx: BotContext) {
     return;
   }
 
-  if (action?.startsWith("post_edit:")) {
-    const draftId = action.split(":")[1];
-
+  /*
+   * pe: هو الكولباك الحقيقي يلي بيبعته زر "✏️ تعديل" من
+   * showPostPreview (postFlow.ts). "post_edit:" ما كان يبعته
+   * حدا فعلياً، فزر التعديل كان يفلت لآخر default ويطلع
+   * "هذا الخيار غير متاح حالياً". ضفنا pe: هون مع نفس المعالج.
+   */
+  if (action?.startsWith("pe:") || action?.startsWith("post_edit:")) {
     await ctx.answerCallbackQuery();
 
     await import("../services/userActions.js").then(({ setUserAction }) =>
@@ -820,8 +823,7 @@ export async function handleCallbacks(ctx: BotContext) {
     await ctx.reply("📊 الإحصائيات\n\n" + "سيتم إضافة الإحصائيات الحقيقية هنا.");
     return;
   }
-
-  if (action === "admin_admins") {
+if (action === "admin_admins") {
     if (!(await isOwner(ctx.from.id))) {
       await ctx.answerCallbackQuery({ text: "⛔ هذا القسم للـOwner فقط.", show_alert: true });
       return;
@@ -865,6 +867,24 @@ export async function handleCallbacks(ctx: BotContext) {
 
   if (action?.startsWith("pg:")) {
     await showPostGroups(ctx, action.slice(3));
+    return;
+  }
+
+  /*
+   * as: زر "🔄 تحديث المجموعات" يطلع من showPostGroups
+   * (postFlow.ts) لما ما في مجموعات محفوظة للحساب. بيبعث
+   * accountId مش draftId، فما بقدر أعيد استخدام showPostGroups
+   * (بتوقع draftId) من دون خطر خطأ جديد. ما كان إله معالج
+   * أصلاً فكان يفلت للـ default. لسا محتاج مزامنة فعلية من
+   * تليجرام (دالة مش موجودة بـ postFlow.ts) — هون بالحد
+   * الأدنى منمنع رسالة "هذا الخيار غير متاح حالياً" ومنوجّه
+   * المستخدم لمكان صح.
+   */
+  if (action?.startsWith("as:")) {
+    await ctx.answerCallbackQuery({
+      text: "🔄 لتحديث المجموعات ارجع لحسابك من القائمة الرئيسية.",
+      show_alert: true
+    });
     return;
   }
 
@@ -1045,6 +1065,14 @@ export async function handleCallbacks(ctx: BotContext) {
       break;
 
     default:
+      /*
+       * أي كولباك ما إله معالج بيوصل هون. منسجله بالـ log
+       * قبل ما نرد بالرسالة العامة، حتى لو صار نفس المشكلة
+       * مرة ثانية (كل ما زر جديد يضاف بدون معالج) نعرف بالضبط
+       * شو نص الكولباك يلي ما تعرف عليه من اللوجز مباشرة،
+       * بدل ما نراجع كل الملف من الأول.
+       */
+      console.error("UNHANDLED CALLBACK ACTION:", action);
       await ctx.reply("⚠️ هذا الخيار غير متاح حالياً.");
   }
 }
