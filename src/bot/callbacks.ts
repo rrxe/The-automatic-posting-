@@ -270,7 +270,7 @@ export async function handleCallbacks(
 
   if (action === "run_publish") {
     await ctx.answerCallbackQuery();
-    await startPublishFlow(ctx);
+    await startCreatePost(ctx);
     return;
   }
 
