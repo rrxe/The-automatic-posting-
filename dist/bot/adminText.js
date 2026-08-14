@@ -68,6 +68,11 @@ export async function handleAdminText(ctx) {
         return;
     }
     if (userAction ===
+        "telegram_web_login") {
+        await ctx.reply("🌐 أكمل تسجيل حساب Telegram من صفحة الويب التي أرسلتها لك.");
+        return;
+    }
+    if (userAction ===
         "telegram_phone") {
         try {
             const user = await getUserByTelegramId(telegramId);

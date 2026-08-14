@@ -1,4 +1,5 @@
 import { run } from "@grammyjs/runner";
+import { registerOfficialTelegramAuth } from "./web/officialTelegramAuth.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -18,6 +19,7 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+registerOfficialTelegramAuth(app);
 
 app.get("/", (_req, res) => {
   res.json({

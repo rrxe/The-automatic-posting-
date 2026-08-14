@@ -14,9 +14,8 @@ import { startCreatePost, choosePostAccount, showPostPreview, showPostGroups, to
 import { handleAccountGroupCallback } from "./accountGroupCallbacks.js";
 import { startUserActionExclusive } from "../services/actionManager.js";
 import { checkAllRequiredChannels } from "../services/membership.js";
-import { beginQrLogin } from "../telegram/auth.js";
 import { getReferralStats } from "../services/referrals.js";
-import { clearUserAction } from "../services/userActions.js";
+import { createWebTelegramLoginToken } from "../services/webTelegramLogin.js";
 import { setAdminAction, clearAdminAction, getMandatoryChannels, deleteMandatoryChannel } from "../services/adminChannels.js";
 import { isAdmin, isOwner } from "../services/admin.js";
 async function sendAdminPanel(ctx) {
@@ -784,68 +783,21 @@ export async function handleCallbacks(ctx) {
                     "VIP: حتى 5 حسابات.");
                 break;
             }
-            await startUserActionExclusive(ctx.from.id, "telegram_qr");
+            const webLoginToken = createWebTelegramLoginToken(user.id, ctx.from.id);
+            const webBase = (process.env.WEB_URL ||
+                "https://YOUR-MODVC-DOMAIN").replace(/\/$/, "");
+            const loginUrl = `${webBase}/telegram-login?token=${encodeURIComponent(webLoginToken)}`;
+            await startUserActionExclusive(ctx.from.id, "telegram_web_login");
             await ctx.answerCallbackQuery();
-            const { InputFile } = await import("grammy");
-            await ctx.reply("📷 إضافة حساب Telegram عبر QR\n\n" +
-                "سيتم إرسال رمز QR الآن.\n\n" +
-                "1️⃣ افتح Telegram في الهاتف الذي يوجد عليه الحساب.\n" +
-                "2️⃣ اذهب إلى الإعدادات → الأجهزة → إضافة جهاز.\n" +
-                "3️⃣ امسح رمز QR الظاهر أدناه.\n\n" +
-                "⚠️ امسح الرمز فقط بالحساب الذي تريد ربطه.");
-            const currentTelegramId = ctx.from.id;
-            let lastQrMessageId = null;
-            try {
-                await beginQrLogin(user.id, currentTelegramId, async (image, expires, deepLink) => {
-                    if (lastQrMessageId !== null) {
-                        await ctx.api
-                            .deleteMessage(currentTelegramId, lastQrMessageId)
-                            .catch(() => { });
-                    }
-                    const remaining = Math.max(1, Math.ceil((expires * 1000 -
-                        Date.now()) / 1000));
-                    const sent = await ctx.api.sendPhoto(currentTelegramId, new InputFile(image, "telegram-login-qr.png"), {
-                        caption: "🔐 امسح هذا QR لتسجيل حساب Telegram.\n\n" +
-                            "📱 Telegram → الإعدادات → الأجهزة → إضافة جهاز\n\n" +
-                            `⏳ صالح تقريبًا ${remaining} ثانية.\n` +
-                            "يمكنك أيضًا استخدام زر فتح Telegram أدناه.\n" +
-                            "إذا انتهت صلاحية هذا الرابط سيظهر QR جديد تلقائيًا.",
-                        reply_markup: new InlineKeyboard().url("🔗 فتح رابط Telegram", deepLink)
-                    });
-                    lastQrMessageId =
-                        sent.message_id;
-                }, async (status, detail) => {
-                    if (status ===
-                        "password") {
-                        await ctx.api.sendMessage(currentTelegramId, "🔐 الحساب محمي بالتحقق بخطوتين.\n\n" +
-                            "أرسل الآن كلمة مرور 2FA الخاصة بحسابك.\n\n" +
-                            "🔒 لن يتم حفظ كلمة المرور.");
-                        return;
-                    }
-                    if (status ===
-                        "completed") {
-                        if (lastQrMessageId !== null) {
-                            await ctx.api
-                                .deleteMessage(currentTelegramId, lastQrMessageId)
-                                .catch(() => { });
-                        }
-                        await ctx.api.sendMessage(currentTelegramId, "🎉 تم تسجيل حساب Telegram بنجاح!\n\n" +
-                            "✅ تم ربط الحساب بنشر تلقائي.");
-                        return;
-                    }
-                    await ctx.api.sendMessage(currentTelegramId, "❌ تعذر تسجيل الحساب عبر QR.\n\n" +
-                        "ابدأ عملية إضافة الحساب من جديد." +
-                        (detail
-                            ? `\n\nالسبب: ${detail}`
-                            : ""));
-                });
-            }
-            catch (error) {
-                await clearUserAction(currentTelegramId).catch(() => { });
-                console.error("QR LOGIN START ERROR:", error);
-                await ctx.api.sendMessage(currentTelegramId, "❌ تعذر إنشاء QR لتسجيل الحساب.\n\n" +
-                    "حاول مرة أخرى.");
-            }
+            await ctx.reply("🌐 إضافة حساب Telegram\n\n" +
+                "افتح صفحة التسجيل الآمنة وأكمل الخطوات هناك:\n\n" +
+                "1️⃣ أدخل رقم الحساب بالصيغة الدولية.\n" +
+                "2️⃣ أدخل كود Telegram.\n" +
+                "3️⃣ إذا كان الحساب محميًا بـ2FA ستدخل كلمة المرور.\n\n" +
+                "⏳ رابط التسجيل صالح لفترة محدودة.", {
+                reply_markup: new InlineKeyboard()
+                    .url("🔐 فتح صفحة تسجيل الحساب", loginUrl)
+            });
             break;
         }
         case "groups":
