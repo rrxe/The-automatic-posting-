@@ -1,5 +1,6 @@
 import { TelegramClient } from "teleproto";
 import { StringSession } from "teleproto/sessions/index.js";
+import { SocksProxyAgent } from "socks-proxy-agent";
 
 import { env } from "../config/env.js";
 import { supabase } from "../db/supabase.js";
@@ -15,15 +16,37 @@ interface CachedClient {
 const clients = new Map<string, CachedClient>();
 
 const IDLE_TIMEOUT_MS =
-  Math.max(
-    1,
-    env.TELEGRAM_CLIENT_IDLE_TIMEOUT_MINUTES
-  ) *
-  60 *
-  1000;
+  Math.max(1, env.TELEGRAM_CLIENT_IDLE_TIMEOUT_MINUTES) * 60 * 1000;
+const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
 
-const SWEEP_INTERVAL_MS =
-  2 * 60 * 1000;
+// إنشاء عميل مع محاكاة جهاز حقيقي وبروكسي اختياري
+function createTelegramClient(session: string = "") {
+  const options: any = {
+    connectionRetries: 5,
+    deviceModel: env.TELEGRAM_DEVICE_MODEL || "iPhone 14 Pro",
+    systemVersion: env.TELEGRAM_SYSTEM_VERSION || "iOS 16.5",
+    appVersion: env.TELEGRAM_APP_VERSION || "10.10.0",
+    langCode: env.TELEGRAM_LANG_CODE || "en",
+    systemLangCode: env.TELEGRAM_SYSTEM_LANG_CODE || "en-US",
+    entityCache: {
+      max: env.TELEGRAM_ENTITY_CACHE_MAX || 100,
+      ttl: (env.TELEGRAM_ENTITY_CACHE_TTL_MINUTES || 60) * 60 * 1000
+    }
+  };
+
+  if (env.TELEGRAM_PROXY_HOST && env.TELEGRAM_PROXY_PORT) {
+    const proxyUrl = `socks5://${env.TELEGRAM_PROXY_USERNAME || ""}:${env.TELEGRAM_PROXY_PASSWORD || ""}@${env.TELEGRAM_PROXY_HOST}:${env.TELEGRAM_PROXY_PORT}`;
+    options.proxy = new SocksProxyAgent(proxyUrl);
+    console.log("Telegram client using proxy (hidden credentials)");
+  }
+
+  return new TelegramClient(
+    new StringSession(session),
+    env.TELEGRAM_API_ID,
+    env.TELEGRAM_API_HASH,
+    options
+  );
+}
 
 async function getAccount(accountId: string) {
   const { data, error } = await supabase
@@ -36,15 +59,11 @@ async function getAccount(accountId: string) {
   if (error || !data) {
     throw new Error("TELEGRAM_ACCOUNT_NOT_FOUND");
   }
-
   return data;
 }
 
-export async function getTelegramClient(
-  accountId: string
-): Promise<TelegramClient> {
+export async function getTelegramClient(accountId: string): Promise<TelegramClient> {
   const cached = clients.get(accountId);
-
   if (cached) {
     try {
       if (cached.client.connected) {
@@ -55,38 +74,15 @@ export async function getTelegramClient(
   }
 
   const account = await getAccount(accountId);
-
-  const session = decrypt(
-    account.session_encrypted
-  );
-
-  const client = new TelegramClient(
-    new StringSession(session),
-    env.TELEGRAM_API_ID,
-    env.TELEGRAM_API_HASH,
-    {
-      connectionRetries: 5,
-      entityCache: {
-        max: env.TELEGRAM_ENTITY_CACHE_MAX,
-        ttl:
-          env.TELEGRAM_ENTITY_CACHE_TTL_MINUTES *
-          60 *
-          1000
-      }
-    }
-  );
+  const session = decrypt(account.session_encrypted);
+  const client = createTelegramClient(session);
 
   await client.connect();
-
-  const authorized =
-    await client.isUserAuthorized();
+  const authorized = await client.isUserAuthorized();
 
   if (!authorized) {
     clients.delete(accountId);
-
-    throw new Error(
-      "TELEGRAM_SESSION_EXPIRED"
-    );
+    throw new Error("TELEGRAM_SESSION_EXPIRED");
   }
 
   clients.set(accountId, {
@@ -99,69 +95,36 @@ export async function getTelegramClient(
   return client;
 }
 
-export function touchTelegramClient(
-  accountId: string
-) {
-  const cached =
-    clients.get(accountId);
-
+export function touchTelegramClient(accountId: string) {
+  const cached = clients.get(accountId);
   if (cached) {
-    cached.lastUsedAt =
-      Date.now();
+    cached.lastUsedAt = Date.now();
   }
 }
 
 async function disconnectIdleClients() {
   const now = Date.now();
-
-  for (const [
-    accountId,
-    cached
-  ] of clients) {
-    if (
-      now - cached.lastUsedAt >
-      IDLE_TIMEOUT_MS
-    ) {
+  for (const [accountId, cached] of clients) {
+    if (now - cached.lastUsedAt > IDLE_TIMEOUT_MS) {
       try {
         await cached.client.disconnect();
       } catch (error) {
-        console.error(
-          `IDLE DISCONNECT ERROR (${accountId}):`,
-          error instanceof Error
-            ? error.message
-            : String(error)
-        );
+        console.error(`IDLE DISCONNECT ERROR (${accountId}):`, error);
       }
-
       clients.delete(accountId);
-
-      console.log(
-        `Idle Telegram client disconnected: ${accountId}`
-      );
+      console.log(`Idle Telegram client disconnected: ${accountId}`);
     }
   }
 }
 
 let sweeperStarted = false;
-
 export function startIdleClientSweeper() {
-  if (sweeperStarted) {
-    return;
-  }
-
+  if (sweeperStarted) return;
   sweeperStarted = true;
-
   setInterval(() => {
-    disconnectIdleClients().catch(
-      (error) => {
-        console.error(
-          "IDLE SWEEP ERROR:",
-          error instanceof Error
-            ? error.message
-            : String(error)
-        );
-      }
-    );
+    disconnectIdleClients().catch((error) => {
+      console.error("IDLE SWEEP ERROR:", error);
+    });
   }, SWEEP_INTERVAL_MS);
 }
 
@@ -169,58 +132,35 @@ export function getActiveTelegramClientCount() {
   return clients.size;
 }
 
-export async function getUserTelegramAccounts(
-  userId: string
-) {
+export async function getUserTelegramAccounts(userId: string) {
   const { data, error } = await supabase
     .from("telegram_accounts")
-    .select(
-      "id, telegram_user_id, phone_hint, display_name, username, is_active, last_connected_at, created_at"
-    )
+    .select("id, telegram_user_id, phone_hint, display_name, username, is_active, last_connected_at, created_at")
     .eq("user_id", userId)
     .eq("is_active", true)
-    .order("created_at", {
-      ascending: false
-    });
+    .order("created_at", { ascending: false });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  if (error) throw new Error(error.message);
   return data ?? [];
 }
 
-export async function disconnectTelegramAccount(
-  accountId: string
-) {
+export async function disconnectTelegramAccount(accountId: string) {
   const cached = clients.get(accountId);
-
   if (cached) {
-    await cached.client.disconnect().catch(
-      () => {}
-    );
-
+    await cached.client.disconnect().catch(() => {});
     clients.delete(accountId);
   }
 }
 
-export async function removeTelegramAccount(
-  accountId: string,
-  userId: string
-) {
+export async function removeTelegramAccount(accountId: string, userId: string) {
   await disconnectTelegramAccount(accountId);
-
   const { error } = await supabase
     .from("telegram_accounts")
-    .update({
-      is_active: false
-    })
+    .update({ is_active: false })
     .eq("id", accountId)
     .eq("user_id", userId);
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 }
 
 export async function warmTelegramAccounts() {
@@ -230,10 +170,7 @@ export async function warmTelegramAccounts() {
     .eq("is_active", true);
 
   if (error) {
-    console.error(
-      "ACCOUNT WARMUP ERROR:",
-      error.message
-    );
+    console.error("ACCOUNT WARMUP ERROR:", error.message);
     return;
   }
 
@@ -241,10 +178,7 @@ export async function warmTelegramAccounts() {
     try {
       await getTelegramClient(account.id);
     } catch (error) {
-      console.error(
-        `Failed to connect account ${account.id}:`,
-        error
-      );
+      console.error(`Failed to connect account ${account.id}:`, error);
     }
   }
 }

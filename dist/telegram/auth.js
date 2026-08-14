@@ -1,14 +1,30 @@
 import { TelegramClient } from "teleproto";
 import { StringSession } from "teleproto/sessions/index.js";
-import * as QRCode from "qrcode";
+import { SocksProxyAgent } from "socks-proxy-agent";
 import { env } from "../config/env.js";
 import { supabase } from "../db/supabase.js";
 import { encrypt } from "../utils/crypto.js";
 import { clearUserAction, setUserAction } from "../services/userActions.js";
 const pendingLogins = new Map();
+// دالة إنشاء عميل مع محاكاة جهاز حقيقي وبروكسي
+function createTelegramClient(session = "") {
+    const options = {
+        connectionRetries: 5,
+        deviceModel: env.TELEGRAM_DEVICE_MODEL || "iPhone 14 Pro",
+        systemVersion: env.TELEGRAM_SYSTEM_VERSION || "iOS 16.5",
+        appVersion: env.TELEGRAM_APP_VERSION || "10.10.0",
+        langCode: env.TELEGRAM_LANG_CODE || "en",
+        systemLangCode: env.TELEGRAM_SYSTEM_LANG_CODE || "en-US"
+    };
+    if (env.TELEGRAM_PROXY_HOST && env.TELEGRAM_PROXY_PORT) {
+        const proxyUrl = `socks5://${env.TELEGRAM_PROXY_USERNAME || ""}:${env.TELEGRAM_PROXY_PASSWORD || ""}@${env.TELEGRAM_PROXY_HOST}:${env.TELEGRAM_PROXY_PORT}`;
+        options.proxy = new SocksProxyAgent(proxyUrl);
+        console.log("Telegram auth using proxy (hidden credentials)");
+    }
+    return new TelegramClient(new StringSession(session), env.TELEGRAM_API_ID, env.TELEGRAM_API_HASH, options);
+}
 function assertTelegramConfig() {
-    if (!env.TELEGRAM_API_ID ||
-        !env.TELEGRAM_API_HASH) {
+    if (!env.TELEGRAM_API_ID || !env.TELEGRAM_API_HASH) {
         throw new Error("TELEGRAM_API_NOT_CONFIGURED");
     }
     if (!env.SESSION_ENCRYPTION_KEY) {
@@ -16,20 +32,11 @@ function assertTelegramConfig() {
     }
 }
 function normalizePhone(input) {
-    let phone = input
-        .trim()
-        .replace(/[\s()-]/g, "");
-    if (phone.startsWith("00")) {
-        phone =
-            "+" + phone.slice(2);
-    }
-    if (!phone.startsWith("+")) {
+    let phone = input.trim().replace(/[\s()-]/g, "");
+    if (phone.startsWith("00"))
+        phone = "+" + phone.slice(2);
+    if (!phone.startsWith("+"))
         phone = "+" + phone;
-    }
-    /*
-     * Accept international phone numbers.
-     * No country is hard-coded here.
-     */
     if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
         throw new Error("INVALID_PHONE");
     }
@@ -46,33 +53,19 @@ function normalizeCode(input) {
 }
 async function saveTelegramAccount(pending) {
     const me = await pending.client.getMe();
-    if (!me ||
-        !("id" in me)) {
+    if (!me || !("id" in me)) {
         throw new Error("LOGIN_FAILED");
     }
     const session = pending.client.session.save();
-    if (!session) {
+    if (!session)
         throw new Error("SESSION_SAVE_FAILED");
-    }
     const encrypted = encrypt(session);
     const telegramUserId = Number(me.id);
-    const username = "username" in me &&
-        me.username
-        ? String(me.username)
-        : null;
-    const displayName = [
-        "firstName" in me
-            ? me.firstName
-            : null,
-        "lastName" in me
-            ? me.lastName
-            : null
-    ]
+    const username = "username" in me && me.username ? String(me.username) : null;
+    const displayName = ["firstName" in me ? me.firstName : null, "lastName" in me ? me.lastName : null]
         .filter(Boolean)
         .join(" ") || null;
-    const phoneHint = pending.phone.length >= 4
-        ? `••••${pending.phone.slice(-4)}`
-        : "••••";
+    const phoneHint = pending.phone.length >= 4 ? `••••${pending.phone.slice(-4)}` : "••••";
     const { data, error } = await supabase
         .from("telegram_accounts")
         .insert({
@@ -88,104 +81,64 @@ async function saveTelegramAccount(pending) {
         .select("*")
         .single();
     if (error) {
-        if (error.code === "23505") {
+        if (error.code === "23505")
             throw new Error("ACCOUNT_ALREADY_LINKED");
-        }
         throw new Error(error.message);
     }
     return data;
 }
 function finishWait(telegramId, result) {
     const pending = pendingLogins.get(telegramId);
-    if (!pending) {
+    if (!pending)
         return;
-    }
     const resolver = pending.waitResolver;
-    pending.waitResolver =
-        null;
+    pending.waitResolver = null;
     resolver?.(result);
 }
+// ===== البدء بتسجيل الدخول (رقم + كود عبر التطبيق) =====
 export async function beginLogin(stormUserId, telegramId, phone) {
     assertTelegramConfig();
     cancelLogin(telegramId);
     const cleanPhone = normalizePhone(phone);
-    const client = new TelegramClient(new StringSession(""), env.TELEGRAM_API_ID, env.TELEGRAM_API_HASH, {
-        connectionRetries: 5
-    });
+    const client = createTelegramClient();
     await client.connect();
-    const pending = {};
-    pending.client =
-        client;
-    pending.stormUserId =
-        stormUserId;
-    pending.phone =
-        cleanPhone;
-    pending.status =
-        "waiting_code";
-    pending.codeResolver =
-        null;
-    pending.passwordResolver =
-        null;
-    pending.waitResolver =
-        null;
-    pending.error =
-        null;
-    pending.isCodeViaApp =
-        null;
-    pending.startedAt =
-        Date.now();
+    const pending = {
+        client,
+        stormUserId,
+        phone: cleanPhone,
+        status: "waiting_code",
+        codeResolver: null,
+        passwordResolver: null,
+        waitResolver: null,
+        error: null,
+        isCodeViaApp: null,
+        startedAt: Date.now()
+    };
     pendingLogins.set(telegramId, pending);
-    console.log("TELEGRAM LOGIN START:", {
-        telegramId,
-        phonePrefix: cleanPhone.slice(0, Math.min(5, cleanPhone.length)),
-        phoneLength: cleanPhone.length
-    });
+    console.log("TELEGRAM LOGIN START:", { telegramId, phonePrefix: cleanPhone.slice(0, 5) });
+    // تأخير عشوائي لتجنب الأنماط
+    await new Promise(resolve => setTimeout(resolve, Math.random() * 1500 + 500));
     client
         .start({
         phoneNumber: async () => cleanPhone,
-        forceSMS: false,
+        forceSMS: false, // تفضيل التطبيق على SMS
         phoneCode: async (isCodeViaApp) => {
-            pending.status =
-                "waiting_code";
-            pending.isCodeViaApp =
-                Boolean(isCodeViaApp);
-            console.log("TELEGRAM LOGIN CODE REQUESTED:", {
-                telegramId,
-                isCodeViaApp: Boolean(isCodeViaApp),
-                delivery: isCodeViaApp
-                    ? "telegram_app"
-                    : "sms_or_non_app"
-            });
-            /*
-             * Do not expose the actual code
-             * in logs.
-             */
+            pending.status = "waiting_code";
+            pending.isCodeViaApp = Boolean(isCodeViaApp);
+            console.log("TELEGRAM LOGIN CODE REQUESTED:", { telegramId, isCodeViaApp });
             return new Promise((resolve) => {
-                pending.codeResolver =
-                    resolve;
+                pending.codeResolver = resolve;
             });
         },
         password: async () => {
-            pending.status =
-                "waiting_password";
+            pending.status = "waiting_password";
             await setUserAction(telegramId, "telegram_password");
             console.log("TELEGRAM 2FA PASSWORD REQUESTED:", telegramId);
-            finishWait(telegramId, {
-                status: "password"
-            });
+            finishWait(telegramId, { status: "password" });
             return new Promise((resolve) => {
-                pending.passwordResolver =
-                    resolve;
+                pending.passwordResolver = resolve;
             });
         },
-        /*
-         * Some Telegram accounts can require
-         * email verification instead of a phone
-         * code. We don't fake or bypass this.
-         *
-         * Returning a clear error is safer than
-         * hanging the login forever.
-         */
         emailAddress: async () => {
             throw new Error("TELEGRAM_EMAIL_VERIFICATION_REQUIRED");
         },
@@ -193,305 +146,102 @@ export async function beginLogin(stormUserId, telegramId, phone) {
             throw new Error("TELEGRAM_EMAIL_VERIFICATION_REQUIRED");
         },
         onError: async (error) => {
-            pending.error =
-                error;
-            console.error("TELEGRAM LOGIN FLOW ERROR:", {
-                telegramId,
-                message: error.message,
-                name: error.name
-            });
+            pending.error = error;
+            console.error("TELEGRAM LOGIN FLOW ERROR:", { telegramId, message: error.message });
             return false;
         }
     })
         .then(async () => {
         try {
             const account = await saveTelegramAccount(pending);
-            pending.status =
-                "completed";
+            pending.status = "completed";
             await clearUserAction(telegramId);
-            finishWait(telegramId, {
-                status: "completed",
-                account
-            });
+            finishWait(telegramId, { status: "completed", account });
             console.log("TELEGRAM LOGIN COMPLETED:", telegramId);
         }
         catch (error) {
-            const finalError = error instanceof Error
-                ? error
-                : new Error(String(error));
-            pending.status =
-                "failed";
-            pending.error =
-                finalError;
+            const finalError = error instanceof Error ? error : new Error(String(error));
+            pending.status = "failed";
+            pending.error = finalError;
             await clearUserAction(telegramId);
-            finishWait(telegramId, {
-                status: "failed",
-                error: finalError
-            });
-            console.error("TELEGRAM SAVE ACCOUNT ERROR:", {
-                telegramId,
-                message: finalError.message
-            });
+            finishWait(telegramId, { status: "failed", error: finalError });
+            console.error("TELEGRAM SAVE ACCOUNT ERROR:", { telegramId, message: finalError.message });
         }
-        await client
-            .disconnect()
-            .catch(() => { });
-        pendingLogins.delete(telegramId);
+        finally {
+            await client.disconnect().catch(() => { });
+            pendingLogins.delete(telegramId);
+        }
     })
         .catch(async (error) => {
-        const finalError = error instanceof Error
-            ? error
-            : new Error(String(error));
-        pending.status =
-            "failed";
-        pending.error =
-            finalError;
+        const finalError = error instanceof Error ? error : new Error(String(error));
+        pending.status = "failed";
+        pending.error = finalError;
         await clearUserAction(telegramId);
-        finishWait(telegramId, {
-            status: "failed",
-            error: finalError
-        });
-        console.error("TELEGRAM LOGIN FAILED:", {
-            telegramId,
-            message: finalError.message,
-            name: finalError.name
-        });
-        await client
-            .disconnect()
-            .catch(() => { });
+        finishWait(telegramId, { status: "failed", error: finalError });
+        console.error("TELEGRAM LOGIN FAILED:", { telegramId, message: finalError.message });
+        await client.disconnect().catch(() => { });
         pendingLogins.delete(telegramId);
     });
-    /*
-     * Wait until teleproto actually asks us
-     * for the verification code.
-     */
-    const startWaitTimeout = 90_000;
-    const startedAt = Date.now();
-    while (pending.codeResolver === null &&
-        pending.status ===
-            "waiting_code") {
-        if (Date.now() -
-            startedAt >
-            startWaitTimeout) {
+    // انتظار حتى يطلب الكود
+    const startWait = Date.now();
+    while (pending.codeResolver === null && pending.status === "waiting_code") {
+        if (Date.now() - startWait > 90000) {
             cancelLogin(telegramId);
             throw new Error("TELEGRAM_CODE_REQUEST_TIMEOUT");
         }
-        await new Promise((resolve) => setTimeout(resolve, 25));
+        await new Promise(resolve => setTimeout(resolve, 25));
     }
-    return {
-        deliveredToApp: Boolean(pending.isCodeViaApp)
-    };
+    return { deliveredToApp: Boolean(pending.isCodeViaApp) };
 }
+// ===== إرسال الكود =====
 export async function submitLoginCode(telegramId, code) {
     const pending = pendingLogins.get(telegramId);
-    if (!pending) {
+    if (!pending)
         throw new Error("NO_PENDING_LOGIN");
-    }
     const normalized = normalizeCode(code);
     if (!/^\d{3,8}$/.test(normalized)) {
         throw new Error("PHONE_CODE_INVALID");
     }
     const resolver = pending.codeResolver;
-    if (!resolver) {
+    if (!resolver)
         throw new Error("CODE_NOT_REQUESTED");
-    }
-    pending.codeResolver =
-        null;
+    pending.codeResolver = null;
     resolver(normalized);
-    /*
-     * Wait for:
-     *
-     * 1. 2FA password
-     * 2. successful login
-     * 3. login failure
-     */
     return new Promise((resolve) => {
-        pending.waitResolver =
-            resolve;
+        pending.waitResolver = resolve;
     });
 }
+// ===== إرسال كلمة مرور 2FA =====
 export async function submitLoginPassword(telegramId, password) {
     const pending = pendingLogins.get(telegramId);
-    if (!pending) {
+    if (!pending)
         throw new Error("NO_PENDING_LOGIN");
-    }
-    if (!password.trim()) {
+    if (!password.trim())
         throw new Error("INVALID_PASSWORD");
-    }
     const resolver = pending.passwordResolver;
-    if (!resolver) {
+    if (!resolver)
         throw new Error("PASSWORD_NOT_REQUESTED");
-    }
-    pending.passwordResolver =
-        null;
+    pending.passwordResolver = null;
     resolver(password.trim());
     return new Promise((resolve) => {
-        pending.waitResolver =
-            resolve;
+        pending.waitResolver = resolve;
     });
 }
+// ===== إلغاء التسجيل =====
 export function cancelLogin(telegramId) {
     const pending = pendingLogins.get(telegramId);
-    if (!pending) {
+    if (!pending)
         return;
-    }
     try {
-        pending.codeResolver =
-            null;
-        pending.passwordResolver =
-            null;
-        pending.waitResolver =
-            null;
+        pending.codeResolver = null;
+        pending.passwordResolver = null;
+        pending.waitResolver = null;
     }
     catch { }
-    pending.client
-        .disconnect()
-        .catch(() => { });
+    pending.client.disconnect().catch(() => { });
     pendingLogins.delete(telegramId);
     clearUserAction(telegramId).catch(() => { });
 }
 export function hasPendingLogin(telegramId) {
     return pendingLogins.has(telegramId);
-}
-export async function beginQrLogin(stormUserId, telegramId, onQr, onStatus) {
-    assertTelegramConfig();
-    cancelLogin(telegramId);
-    const client = new TelegramClient(new StringSession(""), env.TELEGRAM_API_ID, env.TELEGRAM_API_HASH, {
-        connectionRetries: 5
-    });
-    await client.connect();
-    const pending = {};
-    pending.client =
-        client;
-    pending.stormUserId =
-        stormUserId;
-    /*
-     * QR login does not require a phone.
-     * We keep an empty value so the existing
-     * account-saving structure remains compatible.
-     */
-    pending.phone =
-        "";
-    pending.status =
-        "waiting_code";
-    pending.codeResolver =
-        null;
-    pending.passwordResolver =
-        null;
-    pending.waitResolver =
-        null;
-    pending.error =
-        null;
-    pending.isCodeViaApp =
-        null;
-    pending.startedAt =
-        Date.now();
-    pendingLogins.set(telegramId, pending);
-    let firstQrSent = false;
-    let firstQrResolve = null;
-    let firstQrReject = null;
-    const firstQr = new Promise((resolve, reject) => {
-        firstQrResolve =
-            resolve;
-        firstQrReject =
-            reject;
-    });
-    const finishLogin = async () => {
-        try {
-            const account = await saveTelegramAccount(pending);
-            pending.status =
-                "completed";
-            await clearUserAction(telegramId);
-            await onStatus("completed");
-            return account;
-        }
-        catch (error) {
-            const finalError = error instanceof Error
-                ? error
-                : new Error(String(error));
-            pending.status =
-                "failed";
-            pending.error =
-                finalError;
-            await clearUserAction(telegramId);
-            await onStatus("failed", finalError.message);
-            throw finalError;
-        }
-        finally {
-            await client
-                .disconnect()
-                .catch(() => { });
-            pendingLogins.delete(telegramId);
-        }
-    };
-    client
-        .signInUserWithQrCode({
-        apiId: env.TELEGRAM_API_ID,
-        apiHash: env.TELEGRAM_API_HASH
-    }, {
-        qrCode: async ({ token, expires }) => {
-            const deepLink = `tg://login?token=${token.toString("base64url")}`;
-            const image = await QRCode.toBuffer(deepLink, {
-                type: "png",
-                width: 720,
-                margin: 2,
-                errorCorrectionLevel: "M"
-            });
-            await onQr(image, expires, deepLink);
-            if (!firstQrSent) {
-                firstQrSent =
-                    true;
-                firstQrResolve?.();
-                firstQrResolve =
-                    null;
-                firstQrReject =
-                    null;
-            }
-        },
-        password: async (hint) => {
-            pending.status =
-                "waiting_password";
-            await setUserAction(telegramId, "telegram_password");
-            await onStatus("password", hint);
-            return new Promise((resolve) => {
-                pending.passwordResolver =
-                    resolve;
-            });
-        },
-        onError: async (error) => {
-            pending.error =
-                error;
-            console.error("TELEGRAM QR LOGIN ERROR:", {
-                telegramId,
-                message: error.message,
-                name: error.name
-            });
-            return false;
-        }
-    })
-        .then(finishLogin)
-        .catch(async (error) => {
-        const finalError = error instanceof Error
-            ? error
-            : new Error(String(error));
-        pending.status =
-            "failed";
-        pending.error =
-            finalError;
-        if (!firstQrSent) {
-            firstQrReject?.(finalError);
-        }
-        await clearUserAction(telegramId).catch(() => { });
-        await onStatus("failed", finalError.message);
-        await client
-            .disconnect()
-            .catch(() => { });
-        pendingLogins.delete(telegramId);
-    });
-    /*
-     * Wait only until the first QR has
-     * actually been generated and sent.
-     * The real login continues in background.
-     */
-    await firstQr;
 }

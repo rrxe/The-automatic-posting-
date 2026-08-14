@@ -19,6 +19,7 @@
     "jose": "^6.2.8",
     "pino": "^9.9.0",
     "qrcode": "^1.5.4",
+    "socks-proxy-agent": "^10.1.0",
     "teleproto": "^1.228.5",
     "zod": "^4.0.17"
   },

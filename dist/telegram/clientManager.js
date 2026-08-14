@@ -1,13 +1,33 @@
 import { TelegramClient } from "teleproto";
 import { StringSession } from "teleproto/sessions/index.js";
+import { SocksProxyAgent } from "socks-proxy-agent";
 import { env } from "../config/env.js";
 import { supabase } from "../db/supabase.js";
 import { decrypt } from "../utils/crypto.js";
 const clients = new Map();
-const IDLE_TIMEOUT_MS = Math.max(1, env.TELEGRAM_CLIENT_IDLE_TIMEOUT_MINUTES) *
-    60 *
-    1000;
+const IDLE_TIMEOUT_MS = Math.max(1, env.TELEGRAM_CLIENT_IDLE_TIMEOUT_MINUTES) * 60 * 1000;
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
+// إنشاء عميل مع محاكاة جهاز حقيقي وبروكسي اختياري
+function createTelegramClient(session = "") {
+    const options = {
+        connectionRetries: 5,
+        deviceModel: env.TELEGRAM_DEVICE_MODEL || "iPhone 14 Pro",
+        systemVersion: env.TELEGRAM_SYSTEM_VERSION || "iOS 16.5",
+        appVersion: env.TELEGRAM_APP_VERSION || "10.10.0",
+        langCode: env.TELEGRAM_LANG_CODE || "en",
+        systemLangCode: env.TELEGRAM_SYSTEM_LANG_CODE || "en-US",
+        entityCache: {
+            max: env.TELEGRAM_ENTITY_CACHE_MAX || 100,
+            ttl: (env.TELEGRAM_ENTITY_CACHE_TTL_MINUTES || 60) * 60 * 1000
+        }
+    };
+    if (env.TELEGRAM_PROXY_HOST && env.TELEGRAM_PROXY_PORT) {
+        const proxyUrl = `socks5://${env.TELEGRAM_PROXY_USERNAME || ""}:${env.TELEGRAM_PROXY_PASSWORD || ""}@${env.TELEGRAM_PROXY_HOST}:${env.TELEGRAM_PROXY_PORT}`;
+        options.proxy = new SocksProxyAgent(proxyUrl);
+        console.log("Telegram client using proxy (hidden credentials)");
+    }
+    return new TelegramClient(new StringSession(session), env.TELEGRAM_API_ID, env.TELEGRAM_API_HASH, options);
+}
 async function getAccount(accountId) {
     const { data, error } = await supabase
         .from("telegram_accounts")
@@ -33,15 +53,7 @@ export async function getTelegramClient(accountId) {
     }
     const account = await getAccount(accountId);
     const session = decrypt(account.session_encrypted);
-    const client = new TelegramClient(new StringSession(session), env.TELEGRAM_API_ID, env.TELEGRAM_API_HASH, {
-        connectionRetries: 5,
-        entityCache: {
-            max: env.TELEGRAM_ENTITY_CACHE_MAX,
-            ttl: env.TELEGRAM_ENTITY_CACHE_TTL_MINUTES *
-                60 *
-                1000
-        }
-    });
+    const client = createTelegramClient(session);
     await client.connect();
     const authorized = await client.isUserAuthorized();
     if (!authorized) {
@@ -59,22 +71,18 @@ export async function getTelegramClient(accountId) {
 export function touchTelegramClient(accountId) {
     const cached = clients.get(accountId);
     if (cached) {
-        cached.lastUsedAt =
-            Date.now();
+        cached.lastUsedAt = Date.now();
     }
 }
 async function disconnectIdleClients() {
     const now = Date.now();
     for (const [accountId, cached] of clients) {
-        if (now - cached.lastUsedAt >
-            IDLE_TIMEOUT_MS) {
+        if (now - cached.lastUsedAt > IDLE_TIMEOUT_MS) {
             try {
                 await cached.client.disconnect();
             }
             catch (error) {
-                console.error(`IDLE DISCONNECT ERROR (${accountId}):`, error instanceof Error
-                    ? error.message
-                    : String(error));
+                console.error(`IDLE DISCONNECT ERROR (${accountId}):`, error);
             }
             clients.delete(accountId);
             console.log(`Idle Telegram client disconnected: ${accountId}`);
@@ -83,15 +91,12 @@ async function disconnectIdleClients() {
 }
 let sweeperStarted = false;
 export function startIdleClientSweeper() {
-    if (sweeperStarted) {
+    if (sweeperStarted)
         return;
-    }
     sweeperStarted = true;
     setInterval(() => {
         disconnectIdleClients().catch((error) => {
-            console.error("IDLE SWEEP ERROR:", error instanceof Error
-                ? error.message
-                : String(error));
+            console.error("IDLE SWEEP ERROR:", error);
         });
     }, SWEEP_INTERVAL_MS);
 }
@@ -104,12 +109,9 @@ export async function getUserTelegramAccounts(userId) {
         .select("id, telegram_user_id, phone_hint, display_name, username, is_active, last_connected_at, created_at")
         .eq("user_id", userId)
         .eq("is_active", true)
-        .order("created_at", {
-        ascending: false
-    });
-    if (error) {
+        .order("created_at", { ascending: false });
+    if (error)
         throw new Error(error.message);
-    }
     return data ?? [];
 }
 export async function disconnectTelegramAccount(accountId) {
@@ -123,14 +125,11 @@ export async function removeTelegramAccount(accountId, userId) {
     await disconnectTelegramAccount(accountId);
     const { error } = await supabase
         .from("telegram_accounts")
-        .update({
-        is_active: false
-    })
+        .update({ is_active: false })
         .eq("id", accountId)
         .eq("user_id", userId);
-    if (error) {
+    if (error)
         throw new Error(error.message);
-    }
 }
 export async function warmTelegramAccounts() {
     const { data, error } = await supabase

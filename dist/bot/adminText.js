@@ -8,29 +8,15 @@ import { getUserByTelegramId } from "../services/users.js";
 import { handlePostText } from "./postFlow.js";
 import { prepareChatAdd } from "../services/chatAdd.js";
 export async function handleAdminText(ctx) {
-    if (!ctx.from ||
-        !ctx.message?.text) {
+    if (!ctx.from || !ctx.message?.text)
         return;
-    }
     const telegramId = ctx.from.id;
     const text = ctx.message.text.trim();
-    /*
-     * ================================
-     * إنشاء المنشور
-     * ================================
-     */
-    if (await handlePostText(ctx, text)) {
+    // ===== إنشاء المنشور =====
+    if (await handlePostText(ctx, text))
         return;
-    }
-    /*
-     * ================================
-     * حساب Telegram
-     * ================================
-     */
     const userAction = await getUserAction(telegramId);
-    /*
-     * إضافة مجموعة للحساب
-     */
+    // ===== إضافة مجموعة للحساب =====
     if (userAction?.startsWith("add_chat:")) {
         const accountId = userAction.slice("add_chat:".length);
         try {
@@ -42,12 +28,8 @@ export async function handleAdminText(ctx) {
             const result = await prepareChatAdd(telegramId, user.id, accountId, text);
             await ctx.reply("🔎 تم التحقق من الوجهة.\n\n" +
                 `📣 ${result.title}` +
-                (result.username
-                    ? `\n🔗 ${result.username}`
-                    : "") +
-                "\n\n" +
-                "هل تريد إضافة هذه المجموعة للحساب؟\n" +
-                "لن يتم الانضمام إلا بعد تأكيدك.", {
+                (result.username ? `\n🔗 ${result.username}` : "") +
+                "\n\nهل تريد إضافة هذه المجموعة للحساب؟\nلن يتم الانضمام إلا بعد تأكيدك.", {
                 reply_markup: new InlineKeyboard()
                     .text("✅ إضافة والانضمام", "chat_confirm")
                     .row()
@@ -58,22 +40,15 @@ export async function handleAdminText(ctx) {
             await clearUserAction(telegramId);
             const { cancelChatAdd } = await import("../services/chatAdd.js");
             cancelChatAdd(telegramId);
-            const message = error instanceof Error
-                ? error.message
-                : "";
+            const message = error instanceof Error ? error.message : "";
             await ctx.reply(message === "INVALID_CHAT_INPUT"
                 ? "❌ أرسل Username أو رابط Telegram صحيح."
                 : "❌ لم أتمكن من العثور على هذه المجموعة.");
         }
         return;
     }
-    if (userAction ===
-        "telegram_web_login") {
-        await ctx.reply("🌐 أكمل تسجيل حساب Telegram من صفحة الويب التي أرسلتها لك.");
-        return;
-    }
-    if (userAction ===
-        "telegram_phone") {
+    // ===== تسجيل الدخول بالرقم =====
+    if (userAction === "telegram_phone") {
         try {
             const user = await getUserByTelegramId(telegramId);
             if (!user) {
@@ -81,180 +56,127 @@ export async function handleAdminText(ctx) {
                 return;
             }
             const loginInfo = await beginLogin(user.id, telegramId, text);
-            /*
-             * لا نمسح الحالة.
-             * التسجيل مستمر في الخلفية
-             * وينتظر الكود.
-             */
+            // لا نمسح الحالة، ننتظر الكود
             await setUserAction(telegramId, "telegram_code");
             const deliveryMessage = loginInfo.deliveredToApp
-                ? ("📨 تم طلب رمز تسجيل الدخول عبر Telegram.\n\n" +
-                    "📱 افتح Telegram على الجهاز الذي يوجد عليه الحساب، " +
-                    "وابحث عن رسالة تسجيل الدخول من Telegram.\n\n" +
-                    "⚠️ قد لا يصل الرمز عبر SMS في هذه الحالة.")
-                : ("📲 تم طلب رمز تسجيل الدخول.\n\n" +
-                    "تحقق من SMS وأي وسيلة تحقق يعرضها Telegram لهذا الرقم.");
+                ? "📨 تم طلب رمز تسجيل الدخول عبر Telegram.\n\n" +
+                    "📱 افتح Telegram على الجهاز الذي يوجد عليه الحساب، وابحث عن رسالة تسجيل الدخول من Telegram.\n\n" +
+                    "⚠️ قد لا يصل الرمز عبر SMS في هذه الحالة."
+                : "📲 تم طلب رمز تسجيل الدخول.\n\nتحقق من SMS وأي وسيلة تحقق يعرضها Telegram لهذا الرقم.";
             await ctx.reply(deliveryMessage +
-                "\n\n" +
-                "🔢 عند وصول الرمز أرسله هنا بهذا الشكل:\n" +
-                "4 7 0 9 8\n\n" +
-                "🔐 لا تشارك رمز Telegram مع أي شخص.");
+                "\n\n🔢 عند وصول الرمز أرسله هنا بهذا الشكل:\n" +
+                "4 7 0 9 8\n\n🔐 لا تشارك رمز Telegram مع أي شخص.");
         }
         catch (error) {
-            const message = error instanceof Error
-                ? error.message
-                : "UNKNOWN";
+            const message = error instanceof Error ? error.message : "UNKNOWN";
             cancelLogin(telegramId);
             await clearUserAction(telegramId);
-            if (message ===
-                "INVALID_PHONE") {
-                await ctx.reply("❌ رقم الهاتف غير صحيح.\n\n" +
-                    "مثال:\n" +
-                    "964******");
+            if (message === "INVALID_PHONE") {
+                await ctx.reply("❌ رقم الهاتف غير صحيح.\n\nمثال:\n+9647XXXXXXXX");
                 return;
             }
-            if (message ===
-                "TELEGRAM_API_NOT_CONFIGURED") {
+            if (message === "TELEGRAM_API_NOT_CONFIGURED") {
                 await ctx.reply("⚠️ تسجيل حساب Telegram غير مفعّل.");
                 return;
             }
-            await ctx.reply("❌ تعذر بدء تسجيل الحساب.\n\n" +
-                "حاول مرة أخرى.");
+            if (message === "TELEGRAM_EMAIL_VERIFICATION_REQUIRED") {
+                await ctx.reply("⚠️ هذا الحساب يتطلب التحقق عبر البريد الإلكتروني، وهو غير مدعوم حالياً.\n" +
+                    "جرّب حساباً آخر أو استخدم طريقة QR (غير متوفرة حالياً).");
+                return;
+            }
+            await ctx.reply("❌ تعذر بدء تسجيل الحساب.\n\nحاول مرة أخرى.");
             console.error("PHONE LOGIN ERROR:", error);
         }
         return;
     }
-    if (userAction ===
-        "telegram_code") {
+    // ===== استقبال الكود =====
+    if (userAction === "telegram_code") {
         try {
             await ctx.reply("⏳ جاري التحقق من رمز Telegram...");
             const result = await submitLoginCode(telegramId, text);
-            if (result.status ===
-                "password") {
-                /*
-                 * auth.ts غيّر الحالة إلى
-                 * telegram_password.
-                 */
-                await ctx.reply("🔐 الحساب محمي بالتحقق بخطوتين.\n\n" +
-                    "أرسل الآن كلمة مرور 2FA الخاصة بحسابك.\n\n" +
-                    "لن يتم حفظ كلمة المرور.");
+            if (result.status === "password") {
+                await ctx.reply("🔐 الحساب محمي بالتحقق بخطوتين.\n\nأرسل الآن كلمة مرور 2FA الخاصة بحسابك.\n\nلن يتم حفظ كلمة المرور.");
                 return;
             }
-            if (result.status ===
-                "completed") {
+            if (result.status === "completed") {
                 await clearUserAction(telegramId);
-                await ctx.reply("🎉 تم تسجيل حساب Telegram بنجاح!\n\n" +
-                    "✅ الحساب أصبح مرتبطاً بحسابك في نشر تلقائي.");
+                await ctx.reply("🎉 تم تسجيل حساب Telegram بنجاح!\n\n✅ الحساب أصبح مرتبطاً بحسابك في نشر تلقائي.");
                 return;
             }
-            if (result.status ===
-                "failed") {
+            if (result.status === "failed") {
                 throw result.error;
             }
         }
         catch (error) {
-            const message = error instanceof Error
-                ? error.message
-                : "";
+            const message = error instanceof Error ? error.message : "";
             if (message.includes("PHONE_CODE_INVALID")) {
-                await ctx.reply("❌ الرمز غير صحيح.\n\n" +
-                    "أرسله بهذا الشكل:\n" +
-                    "4 7 0 9 8");
+                await ctx.reply("❌ الرمز غير صحيح.\n\nأرسله بهذا الشكل:\n4 7 0 9 8");
                 return;
             }
             if (message.includes("PHONE_CODE_EXPIRED")) {
                 cancelLogin(telegramId);
                 await clearUserAction(telegramId);
-                await ctx.reply("⏳ انتهت صلاحية رمز Telegram.\n\n" +
-                    "اضغط «➕ إضافة حساب» واطلب رمزاً جديداً.");
+                await ctx.reply("⏳ انتهت صلاحية رمز Telegram.\n\nاضغط «➕ إضافة حساب» واطلب رمزاً جديداً.");
                 return;
             }
             cancelLogin(telegramId);
             await clearUserAction(telegramId);
-            await ctx.reply("❌ تعذر تسجيل الدخول.\n\n" +
-                "ابدأ عملية إضافة الحساب من جديد.");
+            await ctx.reply("❌ تعذر تسجيل الدخول.\n\nابدأ عملية إضافة الحساب من جديد.");
             console.error("CODE LOGIN ERROR:", error);
         }
         return;
     }
-    if (userAction ===
-        "telegram_password") {
+    // ===== كلمة مرور 2FA =====
+    if (userAction === "telegram_password") {
         try {
             await ctx.reply("⏳ جاري التحقق من كلمة مرور 2FA...");
             const result = await submitLoginPassword(telegramId, text);
-            if (result.status ===
-                "completed") {
+            if (result.status === "completed") {
                 await clearUserAction(telegramId);
-                await ctx.reply("🎉 تم تسجيل حساب Telegram بنجاح!\n\n" +
-                    "✅ الحساب أصبح مرتبطاً بحسابك في نشر تلقائي.");
+                await ctx.reply("🎉 تم تسجيل حساب Telegram بنجاح!\n\n✅ الحساب أصبح مرتبطاً بحسابك في نشر تلقائي.");
                 return;
             }
-            if (result.status ===
-                "password") {
+            if (result.status === "password") {
                 await ctx.reply("🔐 ما زال الحساب يطلب كلمة مرور 2FA.");
                 return;
             }
-            if (result.status ===
-                "failed") {
+            if (result.status === "failed") {
                 throw result.error;
             }
         }
         catch (error) {
-            const message = error instanceof Error
-                ? error.message
-                : "";
+            const message = error instanceof Error ? error.message : "";
             if (message.includes("PASSWORD_HASH_INVALID")) {
-                await ctx.reply("❌ كلمة مرور 2FA غير صحيحة.\n\n" +
-                    "أرسلها مرة أخرى.");
+                await ctx.reply("❌ كلمة مرور 2FA غير صحيحة.\n\nأرسلها مرة أخرى.");
                 return;
             }
             cancelLogin(telegramId);
             await clearUserAction(telegramId);
-            await ctx.reply("❌ تعذر إكمال تسجيل الدخول.\n\n" +
-                "ابدأ عملية إضافة الحساب من جديد.");
+            await ctx.reply("❌ تعذر إكمال تسجيل الدخول.\n\nابدأ عملية إضافة الحساب من جديد.");
             console.error("2FA ERROR:", error);
         }
         return;
     }
-    /*
-     * ================================
-     * ADMIN
-     * ================================
-     */
-    if (!(await isAdmin(telegramId))) {
+    // ===== أوامر الإدارة (Admin) =====
+    if (!(await isAdmin(telegramId)))
         return;
-    }
     const adminAction = await getAdminAction(telegramId);
-    if (!adminAction) {
+    if (!adminAction)
         return;
-    }
-    /*
-     * VIP grant — تتم معالجته مباشرة
-     * قبل بقية إعدادات النص حتى لا يسقط
-     * بصمت بسبب أي setting map آخر.
-     */
-    if (adminAction ===
-        "vip_grant") {
-        const parts = text
-            .trim()
-            .split(/\s+/);
+    // منح VIP
+    if (adminAction === "vip_grant") {
+        const parts = text.trim().split(/\s+/);
         if (parts.length < 2) {
-            await ctx.reply("❌ الصيغة الصحيحة:\n\n" +
-                "Telegram ID + عدد الأيام\n\n" +
-                "مثال:\n" +
-                "8557464787 30");
+            await ctx.reply("❌ الصيغة الصحيحة:\n\nTelegram ID + عدد الأيام\n\nمثال:\n8557464787 30");
             return;
         }
         const targetId = Number(parts[0]);
         const days = Number(parts[1]);
-        if (!Number.isSafeInteger(targetId) ||
-            targetId <= 0) {
+        if (!Number.isSafeInteger(targetId) || targetId <= 0) {
             await ctx.reply("❌ Telegram ID غير صحيح.");
             return;
         }
-        if (!Number.isInteger(days) ||
-            days <= 0 ||
-            days > 3650) {
+        if (!Number.isInteger(days) || days <= 0 || days > 3650) {
             await ctx.reply("❌ عدد الأيام يجب أن يكون بين 1 و3650.");
             return;
         }
@@ -269,23 +191,18 @@ export async function handleAdminText(ctx) {
         }
         catch (error) {
             console.error("VIP GRANT ERROR:", error);
-            const message = error instanceof Error
-                ? error.message
-                : String(error);
-            if (message ===
-                "USER_NOT_FOUND") {
-                await ctx.reply("❌ المستخدم غير موجود في قاعدة البيانات.\n\n" +
-                    "يجب أن يبدأ المستخدم البوت أولاً.");
+            const message = error instanceof Error ? error.message : String(error);
+            if (message === "USER_NOT_FOUND") {
+                await ctx.reply("❌ المستخدم غير موجود في قاعدة البيانات.\n\nيجب أن يبدأ المستخدم البوت أولاً.");
             }
             else {
-                await ctx.reply("❌ فشل منح VIP.\n\n" +
-                    message);
+                await ctx.reply("❌ فشل منح VIP.\n\n" + message);
             }
         }
         return;
     }
-    if (adminAction ===
-        "add_mandatory_channel") {
+    // إضافة قناة إجبارية
+    if (adminAction === "add_mandatory_channel") {
         try {
             const channel = await addMandatoryChannel(text);
             await clearAdminAction(telegramId);
@@ -294,9 +211,7 @@ export async function handleAdminText(ctx) {
                 `🔗 ${channel.username || channel.chat_id}`);
         }
         catch (error) {
-            const message = error instanceof Error
-                ? error.message
-                : "UNKNOWN";
+            const message = error instanceof Error ? error.message : "UNKNOWN";
             const errors = {
                 CHANNEL_NOT_FOUND: "❌ لم أتمكن من العثور على القناة.",
                 NOT_CHANNEL: "❌ هذا المعرف ليس قناة.",
@@ -304,28 +219,20 @@ export async function handleAdminText(ctx) {
                 BOT_NOT_ADMIN: "❌ يجب أن يكون البوت مسؤولاً في القناة.",
                 CHANNEL_EXISTS: "⚠️ هذه القناة مضافة مسبقاً."
             };
-            await ctx.reply(errors[message] ||
-                "❌ حدث خطأ أثناء إضافة القناة.");
+            await ctx.reply(errors[message] || "❌ حدث خطأ أثناء إضافة القناة.");
         }
         return;
     }
-    /*
-     * ================================
-     * إدارة المشرفين
-     * ================================
-     */
-    if (adminAction ===
-        "admin_add") {
+    // إضافة مشرف
+    if (adminAction === "admin_add") {
         if (!(await (await import("../services/admin.js")).isOwner(telegramId))) {
             await clearAdminAction(telegramId);
             await ctx.reply("⛔ هذا الخيار للـOwner فقط.");
             return;
         }
         const targetTelegramId = Number(text.trim());
-        if (!Number.isSafeInteger(targetTelegramId) ||
-            targetTelegramId <= 0) {
-            await ctx.reply("❌ Telegram ID غير صحيح.\n\n" +
-                "أرسل ID رقمي صحيح.");
+        if (!Number.isSafeInteger(targetTelegramId) || targetTelegramId <= 0) {
+            await ctx.reply("❌ Telegram ID غير صحيح.\n\nأرسل ID رقمي صحيح.");
             return;
         }
         try {
@@ -338,31 +245,25 @@ export async function handleAdminText(ctx) {
         }
         catch (error) {
             console.error("ADMIN ADD ERROR:", error);
-            const message = error instanceof Error
-                ? error.message
-                : "";
-            if (message ===
-                "USER_NOT_FOUND") {
-                await ctx.reply("❌ لم أجد هذا المستخدم.\n\n" +
-                    "يجب أن يكون قد بدأ البوت أولاً.");
+            const message = error instanceof Error ? error.message : "";
+            if (message === "USER_NOT_FOUND") {
+                await ctx.reply("❌ لم أجد هذا المستخدم.\n\nيجب أن يكون قد بدأ البوت أولاً.");
             }
             else {
-                await ctx.reply("❌ تعذر إضافة المشرف.\n\n" +
-                    message);
+                await ctx.reply("❌ تعذر إضافة المشرف.\n\n" + message);
             }
         }
         return;
     }
-    if (adminAction ===
-        "admin_remove") {
+    // إزالة مشرف
+    if (adminAction === "admin_remove") {
         if (!(await (await import("../services/admin.js")).isOwner(telegramId))) {
             await clearAdminAction(telegramId);
             await ctx.reply("⛔ هذا الخيار للـOwner فقط.");
             return;
         }
         const targetTelegramId = Number(text.trim());
-        if (!Number.isSafeInteger(targetTelegramId) ||
-            targetTelegramId <= 0) {
+        if (!Number.isSafeInteger(targetTelegramId) || targetTelegramId <= 0) {
             await ctx.reply("❌ Telegram ID غير صحيح.");
             return;
         }
@@ -375,154 +276,50 @@ export async function handleAdminText(ctx) {
         }
         catch (error) {
             console.error("ADMIN REMOVE ERROR:", error);
-            const message = error instanceof Error
-                ? error.message
-                : "";
-            if (message ===
-                "CANNOT_REMOVE_OWNER") {
+            const message = error instanceof Error ? error.message : "";
+            if (message === "CANNOT_REMOVE_OWNER") {
                 await ctx.reply("⛔ لا يمكن إزالة الـOwner.");
             }
-            else if (message ===
-                "USER_NOT_FOUND") {
+            else if (message === "USER_NOT_FOUND") {
                 await ctx.reply("❌ المستخدم غير موجود.");
             }
             else {
-                await ctx.reply("❌ تعذر إزالة المشرف.\n\n" +
-                    message);
+                await ctx.reply("❌ تعذر إزالة المشرف.\n\n" + message);
             }
         }
         return;
     }
+    // إعدادات النظام
     const settingMap = {
-        set_free_groups: {
-            key: "free_group_limit",
-            label: "حد مجموعات Free",
-            integer: true,
-            min: 1,
-            max: 1000
-        },
-        set_vip_groups: {
-            key: "vip_group_limit",
-            label: "حد مجموعات VIP",
-            integer: true,
-            min: 1,
-            max: 10000
-        },
-        set_free_accounts: {
-            key: "free_account_limit",
-            label: "حد حسابات Free",
-            integer: true,
-            min: 1,
-            max: 50
-        },
-        set_vip_accounts: {
-            key: "vip_account_limit",
-            label: "حد حسابات VIP",
-            integer: true,
-            min: 1,
-            max: 100
-        },
-        set_free_message: {
-            key: "free_message_limit",
-            label: "حد أحرف منشور Free",
-            integer: true,
-            min: 1,
-            max: 4096
-        },
-        set_vip_message: {
-            key: "vip_message_limit",
-            label: "حد أحرف منشور VIP",
-            integer: true,
-            min: 1,
-            max: 4096
-        },
-        set_free_daily_runs: {
-            key: "free_daily_runs",
-            label: "التشغيلات اليومية لـ Free",
-            integer: true,
-            min: 1,
-            max: 100
-        },
-        set_vip_daily_runs: {
-            key: "vip_daily_runs",
-            label: "التشغيلات اليومية لـ VIP",
-            integer: true,
-            min: 1,
-            max: 100
-        },
-        set_free_cycles: {
-            key: "free_cycle_limit",
-            label: "دورات Free لكل تشغيل",
-            integer: true,
-            min: 1,
-            max: 1000
-        },
-        set_vip_cycles: {
-            key: "vip_cycle_limit",
-            label: "دورات VIP لكل تشغيل",
-            integer: true,
-            min: 1,
-            max: 10000
-        },
-        set_free_cycle_delay: {
-            key: "free_cycle_delay_minutes",
-            label: "انتظار الدورات لـ Free",
-            integer: true,
-            min: 0,
-            max: 1440
-        },
-        set_vip_cycle_delay: {
-            key: "vip_cycle_delay_minutes",
-            label: "انتظار الدورات لـ VIP",
-            integer: true,
-            min: 0,
-            max: 1440
-        },
-        set_message_delay: {
-            key: "message_delay_minutes",
-            label: "التأخير بين الرسائل",
-            integer: true,
-            min: 0,
-            max: 1440
-        },
-        set_referral_7: {
-            key: "referral_7_vip_days",
-            label: "مكافأة 7 إحالات",
-            integer: true,
-            min: 1,
-            max: 3650
-        },
-        set_referral_20: {
-            key: "referral_20_vip_days",
-            label: "مكافأة 20 إحالة",
-            integer: true,
-            min: 1,
-            max: 3650
-        },
-        set_vip_price: {
-            key: "vip_price_usdt",
-            label: "سعر VIP",
-            integer: false,
-            min: 0.01,
-            max: 100000
-        }
+        set_free_groups: { key: "free_group_limit", label: "حد مجموعات Free", integer: true, min: 1, max: 1000 },
+        set_vip_groups: { key: "vip_group_limit", label: "حد مجموعات VIP", integer: true, min: 1, max: 10000 },
+        set_free_accounts: { key: "free_account_limit", label: "حد حسابات Free", integer: true, min: 1, max: 50 },
+        set_vip_accounts: { key: "vip_account_limit", label: "حد حسابات VIP", integer: true, min: 1, max: 100 },
+        set_free_message: { key: "free_message_limit", label: "حد أحرف منشور Free", integer: true, min: 1, max: 4096 },
+        set_vip_message: { key: "vip_message_limit", label: "حد أحرف منشور VIP", integer: true, min: 1, max: 4096 },
+        set_free_daily_runs: { key: "free_daily_runs", label: "التشغيلات اليومية لـ Free", integer: true, min: 1, max: 100 },
+        set_vip_daily_runs: { key: "vip_daily_runs", label: "التشغيلات اليومية لـ VIP", integer: true, min: 1, max: 100 },
+        set_free_cycles: { key: "free_cycle_limit", label: "دورات Free لكل تشغيل", integer: true, min: 1, max: 1000 },
+        set_vip_cycles: { key: "vip_cycle_limit", label: "دورات VIP لكل تشغيل", integer: true, min: 1, max: 10000 },
+        set_free_cycle_delay: { key: "free_cycle_delay_minutes", label: "انتظار الدورات لـ Free", integer: true, min: 0, max: 1440 },
+        set_vip_cycle_delay: { key: "vip_cycle_delay_minutes", label: "انتظار الدورات لـ VIP", integer: true, min: 0, max: 1440 },
+        set_message_delay: { key: "message_delay_minutes", label: "التأخير بين الرسائل", integer: true, min: 0, max: 1440 },
+        set_referral_7: { key: "referral_7_vip_days", label: "مكافأة 7 إحالات", integer: true, min: 1, max: 3650 },
+        set_referral_20: { key: "referral_20_vip_days", label: "مكافأة 20 إحالة", integer: true, min: 1, max: 3650 },
+        set_vip_price: { key: "vip_price_usdt", label: "سعر VIP", integer: false, min: 0.01, max: 100000 }
     };
     const setting = settingMap[adminAction];
     if (setting) {
-        const value = Number(text
-            .trim()
-            .replace(",", "."));
+        const value = Number(text.trim().replace(",", "."));
         if (!Number.isFinite(value)) {
             await ctx.reply("❌ أرسل رقماً صحيحاً.");
             return;
         }
-        if (setting.integer &&
-            !Number.isInteger(value)) {
+        if (setting.integer && !Number.isInteger(value)) {
             await ctx.reply("❌ يجب أن يكون الرقم عدداً صحيحاً.");
             return;
         }
-        if (value < setting.min ||
-            value > setting.max) {
+        if (value < setting.min || value > setting.max) {
             await ctx.reply(`❌ القيمة يجب أن تكون بين ${setting.min} و ${setting.max}.`);
             return;
         }
