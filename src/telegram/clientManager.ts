@@ -19,7 +19,6 @@ const IDLE_TIMEOUT_MS =
   Math.max(1, env.TELEGRAM_CLIENT_IDLE_TIMEOUT_MINUTES) * 60 * 1000;
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
 
-// إنشاء عميل مع محاكاة جهاز حقيقي وبروكسي اختياري
 function createTelegramClient(session: string = "") {
   const options: any = {
     connectionRetries: 5,
@@ -34,7 +33,6 @@ function createTelegramClient(session: string = "") {
     }
   };
 
-  // إضافة بروكسي فقط إذا كان المضيف والمنفذ غير فارغين
   const proxyHost = env.TELEGRAM_PROXY_HOST?.trim();
   const proxyPort = env.TELEGRAM_PROXY_PORT?.trim();
   if (proxyHost && proxyPort) {
@@ -44,9 +42,9 @@ function createTelegramClient(session: string = "") {
     const proxyUrl = `socks5://${auth}${proxyHost}:${proxyPort}`;
     try {
       options.proxy = new SocksProxyAgent(proxyUrl);
-      console.log("Telegram client using proxy (credentials hidden)");
+      console.log("Telegram client using proxy");
     } catch (err) {
-      console.warn("Invalid proxy configuration, skipping proxy:", err);
+      console.warn("Invalid proxy config, skipping:", err);
     }
   }
 

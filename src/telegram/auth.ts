@@ -27,7 +27,6 @@ export type LoginStepResult =
 
 const pendingLogins = new Map<number, PendingLogin>();
 
-// دالة إنشاء عميل مع محاكاة جهاز حقيقي وبروكسي اختياري
 function createTelegramClient(session: string = "") {
   const options: any = {
     connectionRetries: 5,
@@ -38,7 +37,6 @@ function createTelegramClient(session: string = "") {
     systemLangCode: env.TELEGRAM_SYSTEM_LANG_CODE || "en-US"
   };
 
-  // إضافة بروكسي فقط إذا كان المضيف والمنفذ غير فارغين
   const proxyHost = env.TELEGRAM_PROXY_HOST?.trim();
   const proxyPort = env.TELEGRAM_PROXY_PORT?.trim();
   if (proxyHost && proxyPort) {
@@ -48,9 +46,9 @@ function createTelegramClient(session: string = "") {
     const proxyUrl = `socks5://${auth}${proxyHost}:${proxyPort}`;
     try {
       options.proxy = new SocksProxyAgent(proxyUrl);
-      console.log("Telegram auth using proxy (credentials hidden)");
+      console.log("Telegram auth using proxy");
     } catch (err) {
-      console.warn("Invalid proxy configuration, skipping proxy:", err);
+      console.warn("Invalid proxy config, skipping:", err);
     }
   }
 
@@ -138,7 +136,6 @@ function finishWait(telegramId: number, result: LoginStepResult) {
   resolver?.(result);
 }
 
-// ===== البدء بتسجيل الدخول (رقم + كود عبر التطبيق) =====
 export async function beginLogin(stormUserId: string, telegramId: number, phone: string) {
   assertTelegramConfig();
   cancelLogin(telegramId);
@@ -163,13 +160,12 @@ export async function beginLogin(stormUserId: string, telegramId: number, phone:
 
   console.log("TELEGRAM LOGIN START:", { telegramId, phonePrefix: cleanPhone.slice(0, 5) });
 
-  // تأخير عشوائي لتجنب الأنماط
   await new Promise(resolve => setTimeout(resolve, Math.random() * 1500 + 500));
 
   client
     .start({
       phoneNumber: async () => cleanPhone,
-      forceSMS: false, // تفضيل التطبيق على SMS
+      forceSMS: false,
       phoneCode: async (isCodeViaApp?: boolean) => {
         pending.status = "waiting_code";
         pending.isCodeViaApp = Boolean(isCodeViaApp);
@@ -229,7 +225,6 @@ export async function beginLogin(stormUserId: string, telegramId: number, phone:
       pendingLogins.delete(telegramId);
     });
 
-  // انتظار حتى يطلب الكود
   const startWait = Date.now();
   while (pending.codeResolver === null && pending.status === "waiting_code") {
     if (Date.now() - startWait > 90000) {
@@ -242,7 +237,6 @@ export async function beginLogin(stormUserId: string, telegramId: number, phone:
   return { deliveredToApp: Boolean(pending.isCodeViaApp) };
 }
 
-// ===== إرسال الكود =====
 export async function submitLoginCode(telegramId: number, code: string): Promise<LoginStepResult> {
   const pending = pendingLogins.get(telegramId);
   if (!pending) throw new Error("NO_PENDING_LOGIN");
@@ -263,7 +257,6 @@ export async function submitLoginCode(telegramId: number, code: string): Promise
   });
 }
 
-// ===== إرسال كلمة مرور 2FA =====
 export async function submitLoginPassword(telegramId: number, password: string): Promise<LoginStepResult> {
   const pending = pendingLogins.get(telegramId);
   if (!pending) throw new Error("NO_PENDING_LOGIN");
@@ -281,7 +274,6 @@ export async function submitLoginPassword(telegramId: number, password: string):
   });
 }
 
-// ===== إلغاء التسجيل =====
 export function cancelLogin(telegramId: number) {
   const pending = pendingLogins.get(telegramId);
   if (!pending) return;

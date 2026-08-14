@@ -7,7 +7,6 @@ import { decrypt } from "../utils/crypto.js";
 const clients = new Map();
 const IDLE_TIMEOUT_MS = Math.max(1, env.TELEGRAM_CLIENT_IDLE_TIMEOUT_MINUTES) * 60 * 1000;
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
-// إنشاء عميل مع محاكاة جهاز حقيقي وبروكسي اختياري
 function createTelegramClient(session = "") {
     const options = {
         connectionRetries: 5,
@@ -21,7 +20,6 @@ function createTelegramClient(session = "") {
             ttl: (env.TELEGRAM_ENTITY_CACHE_TTL_MINUTES || 60) * 60 * 1000
         }
     };
-    // إضافة بروكسي فقط إذا كان المضيف والمنفذ غير فارغين
     const proxyHost = env.TELEGRAM_PROXY_HOST?.trim();
     const proxyPort = env.TELEGRAM_PROXY_PORT?.trim();
     if (proxyHost && proxyPort) {
@@ -31,10 +29,10 @@ function createTelegramClient(session = "") {
         const proxyUrl = `socks5://${auth}${proxyHost}:${proxyPort}`;
         try {
             options.proxy = new SocksProxyAgent(proxyUrl);
-            console.log("Telegram client using proxy (credentials hidden)");
+            console.log("Telegram client using proxy");
         }
         catch (err) {
-            console.warn("Invalid proxy configuration, skipping proxy:", err);
+            console.warn("Invalid proxy config, skipping:", err);
         }
     }
     return new TelegramClient(new StringSession(session), env.TELEGRAM_API_ID, env.TELEGRAM_API_HASH, options);
