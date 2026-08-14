@@ -3,6 +3,7 @@ import { bot } from "./index.js";
 import { sendDashboard } from "./dashboard.js";
 import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
+import { startPublishFlow } from "./messageComposer.js";
 import { getUserTelegramAccounts } from "../telegram/clientManager.js";
 import { getUserByTelegramId } from "../services/users.js";
 import { getAppSettings } from "../services/settings.js";
@@ -113,6 +114,11 @@ export async function handleCallbacks(ctx) {
     if (action === "create_message") {
         await ctx.answerCallbackQuery();
         await startCreatePost(ctx);
+        return;
+    }
+    if (action === "run_publish") {
+        await ctx.answerCallbackQuery();
+        await startPublishFlow(ctx);
         return;
     }
     if (action === "publish_history") {

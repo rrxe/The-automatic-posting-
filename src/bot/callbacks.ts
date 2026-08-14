@@ -8,6 +8,7 @@ import {
 } from "./adminExtras.js";
 import {
   startMessageComposer,
+  startPublishFlow,
   chooseMessageAccount,
   startNewMessage,
   startMyMessages,
@@ -264,6 +265,12 @@ export async function handleCallbacks(
   if (action === "create_message") {
     await ctx.answerCallbackQuery();
     await startCreatePost(ctx);
+    return;
+  }
+
+  if (action === "run_publish") {
+    await ctx.answerCallbackQuery();
+    await startPublishFlow(ctx);
     return;
   }
 
