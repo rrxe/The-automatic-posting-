@@ -3,7 +3,7 @@ import { bot } from "./index.js";
 import { sendDashboard } from "./dashboard.js";
 import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
-import { startPublishFlow } from "./messageComposer.js";
+import { startPublishFlow, showSavedMessages } from "./messageComposer.js";
 import { getUserTelegramAccounts } from "../telegram/clientManager.js";
 import { getUserByTelegramId } from "../services/users.js";
 import { getAppSettings } from "../services/settings.js";
@@ -357,6 +357,10 @@ export async function handleCallbacks(ctx) {
     }
     if (action?.startsWith("pa:")) {
         await choosePostAccount(ctx, action.slice(3));
+        return;
+    }
+    if (action?.startsWith("rp:")) {
+        await showSavedMessages(ctx, action.slice(3));
         return;
     }
     if (action?.startsWith("pp:")) {

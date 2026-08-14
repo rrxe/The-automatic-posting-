@@ -624,6 +624,14 @@ export async function handleCallbacks(
     return;
   }
 
+  if (action?.startsWith("rp:")) {
+    await showSavedMessages(
+      ctx,
+      action.slice(3)
+    );
+    return;
+  }
+
   if (action?.startsWith("pp:")) {
     await showPostPreview(
       ctx,
