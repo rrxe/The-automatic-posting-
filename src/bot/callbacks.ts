@@ -990,23 +990,12 @@ if (action === "admin_admins") {
         break;
       }
 
-      const webLoginToken = createWebTelegramLoginToken(user.id, ctx.from.id);
-
-      const webBase = (process.env.WEB_URL || "https://YOUR-MODVC-DOMAIN").replace(/\/$/, "");
-      const loginUrl = `${webBase}/telegram-login?token=${encodeURIComponent(webLoginToken)}`;
-
-      await startUserActionExclusive(ctx.from.id, "telegram_web_login");
+      await startUserActionExclusive(ctx.from.id, "telegram_phone");
 
       await ctx.reply(
-        "🌐 إضافة حساب Telegram\n\n" +
-          "افتح صفحة التسجيل الآمنة وأكمل الخطوات هناك:\n\n" +
-          "1️⃣ أدخل رقم الحساب بالصيغة الدولية.\n" +
-          "2️⃣ أدخل كود Telegram.\n" +
-          "3️⃣ إذا كان الحساب محميًا بـ2FA ستدخل كلمة المرور.\n\n" +
-          "⏳ رابط التسجيل صالح لفترة محدودة.",
-        {
-          reply_markup: new InlineKeyboard().url("🔐 فتح صفحة تسجيل الحساب", loginUrl)
-        }
+        "➕ إضافة حساب Telegram\n\n" +
+          "أرسل رقم الحساب بالصيغة الدولية.\n\n" +
+          "مثال:\n964******"
       );
 
       break;
