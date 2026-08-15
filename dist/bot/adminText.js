@@ -112,7 +112,6 @@ export async function handleAdminText(ctx) {
             await ctx.reply("⏳ جاري التحقق من رمز Telegram...");
             const result = await submitLoginCode(telegramId, text);
             if (result.status === "password") {
-                /* auth.ts غيّر الحالة إلى telegram_password. */
                 await ctx.reply("🔐 الحساب محمي بالتحقق بخطوتين.\n\n" +
                     "أرسل الآن كلمة مرور 2FA الخاصة بحسابك.\n\n" +
                     "لن يتم حفظ كلمة المرور.");
@@ -138,6 +137,12 @@ export async function handleAdminText(ctx) {
                 cancelLogin(telegramId);
                 await clearUserAction(telegramId);
                 await ctx.reply("⏳ انتهت صلاحية رمز Telegram.\n\nاضغط «➕ إضافة حساب» واطلب رمزاً جديداً.");
+                return;
+            }
+            if (message === "ACCOUNT_ALREADY_LINKED") {
+                cancelLogin(telegramId);
+                await clearUserAction(telegramId);
+                await ctx.reply("⚠️ حدث تعارض أثناء الحفظ (على الأغلب محاولتان بنفس الوقت).\n\nحاول مرة أخرى.");
                 return;
             }
             cancelLogin(telegramId);
@@ -188,10 +193,6 @@ export async function handleAdminText(ctx) {
     if (!adminAction) {
         return;
     }
-    /*
-     * VIP grant — تتم معالجته مباشرة قبل بقية إعدادات النص حتى لا يسقط
-     * بصمت بسبب أي setting map آخر.
-     */
     if (adminAction === "vip_grant") {
         const parts = text.trim().split(/\s+/);
         if (parts.length < 2) {
@@ -250,9 +251,6 @@ export async function handleAdminText(ctx) {
         }
         return;
     }
-    /* ================================
-     * إدارة المشرفين
-     * ================================ */
     if (adminAction === "admin_add") {
         if (!(await (await import("../services/admin.js")).isOwner(telegramId))) {
             await clearAdminAction(telegramId);

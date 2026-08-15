@@ -75,9 +75,7 @@ async function saveTelegramAccount(pending) {
         .filter(Boolean)
         .join(" ") || null;
     const phoneHint = pending.phone.length >= 4 ? `••••${pending.phone.slice(-4)}` : "••••";
-    const { data, error } = await supabase
-        .from("telegram_accounts")
-        .insert({
+    const payload = {
         user_id: pending.stormUserId,
         telegram_user_id: telegramUserId,
         phone_hint: phoneHint,
@@ -86,7 +84,53 @@ async function saveTelegramAccount(pending) {
         display_name: displayName,
         username,
         last_connected_at: new Date().toISOString()
-    })
+    };
+    /*
+     * telegram_user_id فريد عالمياً في قاعدة البيانات (uq_telegram_accounts_telegram_user
+     * من migration_v3.sql) — حساب Telegram واحد لا يمكن ربطه إلا بمستخدم Storm واحد.
+     * وبما أن الحذف من «⚙️ حسابي» وإلغاء التفعيل التلقائي (جلسة منتهية / حساب محظور)
+     * لا يمسحان الصف فعلياً بل يعطّلانه فقط (is_active=false)، فإن أي إعادة تسجيل لاحقة
+     * لنفس الحساب كانت تصطدم بهذا القيد وتفشل بدل أن تُحدّث الصف الموجود أصلاً.
+     */
+    const { data: existing, error: lookupError } = await supabase
+        .from("telegram_accounts")
+        .select("id, user_id")
+        .eq("telegram_user_id", telegramUserId)
+        .maybeSingle();
+    if (lookupError) {
+        throw new Error(lookupError.message);
+    }
+    if (existing) {
+        if (existing.user_id !== pending.stormUserId) {
+            /*
+             * الحساب مرتبط حالياً بمستخدم Storm آخر. الدخول عبر رمز/كلمة مرور
+             * تسجيل الدخول الحقيقيين لـ Telegram هو إثبات الملكية الحالية للحساب،
+             * فننقل الربط تلقائياً للمستخدم الجديد (payload.user_id بالأسفل) —
+             * يختفي الحساب من قائمة المستخدم القديم فوراً لأنها مفلترة بـ user_id.
+             */
+            console.log("TELEGRAM ACCOUNT TRANSFERRED:", {
+                telegramUserId,
+                fromStormUserId: existing.user_id,
+                toStormUserId: pending.stormUserId
+            });
+        }
+        /*
+         * نفس الصف يُحدَّث في الحالتين: إعادة ربط لنفس المالك (تجديد جلسة)،
+         * أو نقل ملكية لمالك جديد — payload.user_id هو صاحب المحاولة الحالية.
+         */
+        const { data, error } = await supabase
+            .from("telegram_accounts")
+            .update(payload)
+            .eq("id", existing.id)
+            .select("*")
+            .single();
+        if (error)
+            throw new Error(error.message);
+        return data;
+    }
+    const { data, error } = await supabase
+        .from("telegram_accounts")
+        .insert(payload)
         .select("*")
         .single();
     if (error) {
@@ -184,25 +228,7 @@ export async function beginLogin(stormUserId, telegramId, phone) {
         onError: async (error) => {
             pending.error = error;
             console.error("TELEGRAM LOGIN FLOW ERROR:", { telegramId, message: error.message });
-            /*
-             * هذا هو سبب تجمّد البوت بالكامل سابقاً: كانت هذه الدالة ترجع false
-             * دائماً، فكانت مكتبة teleproto تُعيد طلب الرمز داخلياً بصمت (حلقة
-             * while(1) داخلية) دون أن تُخبر كودنا بأي شيء. النتيجة: أي خطأ أثناء
-             * تسجيل الدخول (رمز خاطئ، رمز منتهي، ...) كان يترك submitLoginCode
-             * منتظراً إلى الأبد، ولأن البوت يعالج التحديثات بالتتابع (bot.start)
-             * كان هذا الانتظار الأبدي يُجمّد الاستخدام كاملاً لكل المستخدمين.
-             *
-             * الإصلاح: نُحرر submitLoginCode/submitLoginPassword فوراً بغض النظر
-             * عن قرار teleproto التالي.
-             */
             finishWait(telegramId, { status: "failed", error });
-            /*
-             * "الرمز خاطئ" أو "كلمة مرور 2FA خاطئة" فقط: نسمح لـ teleproto بإعادة
-             * الطلب على نفس الجلسة (المستخدم يرسل رمزاً/كلمة مرور جديدة دون إعادة
-             * إدخال رقم الهاتف من جديد) — تماماً كما يفترض adminText.ts أصلاً.
-             * أي خطأ آخر (رمز منتهي، Flood Wait، تحقق بريد مطلوب، ...) يوقف
-             * المحاولة نهائياً بدل إعادة المحاولة الصامتة.
-             */
             const rawCode = error?.errorMessage;
             const recoverable = rawCode === "PHONE_CODE_INVALID" ||
                 rawCode === "PASSWORD_HASH_INVALID" ||
@@ -250,10 +276,6 @@ export async function beginLogin(stormUserId, telegramId, phone) {
         }
         await new Promise(resolve => setTimeout(resolve, 25));
     }
-    /*
-     * إذا فشل تسجيل الدخول قبل وصولنا لمرحلة طلب الرمز أصلاً (مثال: حساب
-     * يتطلب تحقق بريد إلكتروني غير مدعوم)، لا نُرجع نجاحاً وهمياً.
-     */
     if (pending.status === "failed") {
         throw pending.error ?? new Error("TELEGRAM_LOGIN_FAILED");
     }

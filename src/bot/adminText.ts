@@ -92,6 +92,7 @@ export async function handleAdminText(ctx: BotContext) {
     return;
   }
 
+
   if (userAction === "telegram_phone") {
     try {
       const user = await getUserByTelegramId(telegramId);
@@ -160,7 +161,6 @@ export async function handleAdminText(ctx: BotContext) {
       const result = await submitLoginCode(telegramId, text);
 
       if (result.status === "password") {
-        /* auth.ts غيّر الحالة إلى telegram_password. */
         await ctx.reply(
           "🔐 الحساب محمي بالتحقق بخطوتين.\n\n" +
             "أرسل الآن كلمة مرور 2FA الخاصة بحسابك.\n\n" +
@@ -194,6 +194,15 @@ export async function handleAdminText(ctx: BotContext) {
         await clearUserAction(telegramId);
         await ctx.reply(
           "⏳ انتهت صلاحية رمز Telegram.\n\nاضغط «➕ إضافة حساب» واطلب رمزاً جديداً."
+        );
+        return;
+      }
+
+      if (message === "ACCOUNT_ALREADY_LINKED") {
+        cancelLogin(telegramId);
+        await clearUserAction(telegramId);
+        await ctx.reply(
+          "⚠️ حدث تعارض أثناء الحفظ (على الأغلب محاولتان بنفس الوقت).\n\nحاول مرة أخرى."
         );
         return;
       }
@@ -259,10 +268,6 @@ export async function handleAdminText(ctx: BotContext) {
     return;
   }
 
-  /*
-   * VIP grant — تتم معالجته مباشرة قبل بقية إعدادات النص حتى لا يسقط
-   * بصمت بسبب أي setting map آخر.
-   */
   if (adminAction === "vip_grant") {
     const parts = text.trim().split(/\s+/);
 
@@ -282,7 +287,7 @@ export async function handleAdminText(ctx: BotContext) {
     }
 
     if (!Number.isInteger(days) || days <= 0 || days > 3650) {
-  await ctx.reply("❌ عدد الأيام يجب أن يكون بين 1 و3650.");
+      await ctx.reply("❌ عدد الأيام يجب أن يكون بين 1 و3650.");
       return;
     }
 
@@ -341,9 +346,6 @@ export async function handleAdminText(ctx: BotContext) {
     return;
   }
 
-  /* ================================
-   * إدارة المشرفين
-   * ================================ */
   if (adminAction === "admin_add") {
     if (!(await (await import("../services/admin.js")).isOwner(telegramId))) {
       await clearAdminAction(telegramId);
