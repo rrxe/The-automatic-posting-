@@ -34,8 +34,12 @@ import {
 
 import {
   createPublishRun,
-  executeSinglePublish
+  executePublishCycles
 } from "../services/publish.js";
+
+import {
+  enqueuePublish
+} from "../services/publishQueue.js";
 
 import {
   setUserAction,
@@ -792,36 +796,59 @@ export async function publishPost(
       }
     );
 
-    const result =
-      await executeSinglePublish(
-        user.id,
-        draft.telegram_account_id,
-        run.runId
-      );
+    /*
+     * مهم: لا ننتظر (await) انتهاء عملية النشر هنا. النشر قد يستغرق عدة
+     * دورات مع دقائق انتظار بينها، وانتظاره مباشرة داخل معالج الرسالة كان
+     * يجمّد البوت بالكامل (ويُعطّل زر «⏹ إيقاف» نفسه، لأن البوت لا يستطيع
+     * معالجة ضغطة الإيقاف قبل انتهاء الانتظار). ننفّذها في الخلفية عبر نفس
+     * طابور publishQueue المستخدم في تدفق النشر الآخر، ونرسل نتيجتها كرسالة
+     * منفصلة عند الانتهاء.
+     */
+    void enqueuePublish(() =>
+      executePublishCycles(user.id, draft.telegram_account_id, run.runId)
+    )
+      .then(async (result) => {
+        try {
+          await markDraftUsed(user.id, draft.id);
 
-    await markDraftUsed(
-      user.id,
-      draft.id
-    );
-
-    await ctx.reply(
-      "✅ انتهت العملية\n\n" +
-      `✅ نجح: ${result.success}\n` +
-      `❌ فشل: ${result.failed}`,
-      {
-        reply_markup:
-          new InlineKeyboard()
-            .text(
-              "📊 سجل النشر",
-              "publish_history"
-            )
-            .row()
-            .text(
-              "🏠 الرئيسية",
-              "dashboard"
-            )
-      }
-    );
+          await ctx.reply(
+            "✅ انتهت العملية\n\n" +
+            `✅ نجح: ${result.success}\n` +
+            `❌ فشل: ${result.failed}`,
+            {
+              reply_markup:
+                new InlineKeyboard()
+                  .text(
+                    "📊 سجل النشر",
+                    "publish_history"
+                  )
+                  .row()
+                  .text(
+                    "🏠 الرئيسية",
+                    "dashboard"
+                  )
+            }
+          );
+        } catch (error) {
+          console.error("PUBLISH FINISH MESSAGE ERROR:", error);
+        }
+      })
+      .catch(async (error) => {
+        console.error("BACKGROUND PUBLISH ERROR:", error);
+        try {
+          await ctx.reply(
+            "❌ توقف تشغيل النشر بسبب خطأ.\n\n" +
+              (error instanceof Error ? error.message : String(error)),
+            {
+              reply_markup:
+                new InlineKeyboard()
+                  .text("📊 سجل النشر", "publish_history")
+                  .row()
+                  .text("🏠 الرئيسية", "dashboard")
+            }
+          );
+        } catch {}
+      });
   } catch (error) {
     console.error(
       "PUBLISH ERROR:",

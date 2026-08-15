@@ -104,6 +104,35 @@ function finishWait(telegramId, result) {
     pending.waitResolver = null;
     resolver?.(result);
 }
+/*
+ * شبكة أمان: لا يجب لأي طلب ينتظر نتيجة رمز/كلمة مرور أن يتعلق إلى الأبد.
+ * حتى مع إصلاح onError بالأسفل، هذا يضمن أن submitLoginCode/submitLoginPassword
+ * سترجع رداً خلال 90 ثانية كحد أقصى مهما حدث (خطأ غير متوقع من المكتبة، تعليق شبكة، ...).
+ */
+const LOGIN_STEP_TIMEOUT_MS = 90_000;
+function waitForLoginStep(telegramId, pending) {
+    return new Promise((resolve) => {
+        let settled = false;
+        const settle = (result) => {
+            if (settled)
+                return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(result);
+        };
+        pending.waitResolver = settle;
+        const timer = setTimeout(() => {
+            if (settled)
+                return;
+            console.error("TELEGRAM LOGIN STEP TIMEOUT:", { telegramId });
+            cancelLogin(telegramId);
+            settle({
+                status: "failed",
+                error: new Error("TELEGRAM_LOGIN_STEP_TIMEOUT")
+            });
+        }, LOGIN_STEP_TIMEOUT_MS);
+    });
+}
 export async function beginLogin(stormUserId, telegramId, phone) {
     assertTelegramConfig();
     cancelLogin(telegramId);
@@ -155,7 +184,31 @@ export async function beginLogin(stormUserId, telegramId, phone) {
         onError: async (error) => {
             pending.error = error;
             console.error("TELEGRAM LOGIN FLOW ERROR:", { telegramId, message: error.message });
-            return false;
+            /*
+             * هذا هو سبب تجمّد البوت بالكامل سابقاً: كانت هذه الدالة ترجع false
+             * دائماً، فكانت مكتبة teleproto تُعيد طلب الرمز داخلياً بصمت (حلقة
+             * while(1) داخلية) دون أن تُخبر كودنا بأي شيء. النتيجة: أي خطأ أثناء
+             * تسجيل الدخول (رمز خاطئ، رمز منتهي، ...) كان يترك submitLoginCode
+             * منتظراً إلى الأبد، ولأن البوت يعالج التحديثات بالتتابع (bot.start)
+             * كان هذا الانتظار الأبدي يُجمّد الاستخدام كاملاً لكل المستخدمين.
+             *
+             * الإصلاح: نُحرر submitLoginCode/submitLoginPassword فوراً بغض النظر
+             * عن قرار teleproto التالي.
+             */
+            finishWait(telegramId, { status: "failed", error });
+            /*
+             * "الرمز خاطئ" أو "كلمة مرور 2FA خاطئة" فقط: نسمح لـ teleproto بإعادة
+             * الطلب على نفس الجلسة (المستخدم يرسل رمزاً/كلمة مرور جديدة دون إعادة
+             * إدخال رقم الهاتف من جديد) — تماماً كما يفترض adminText.ts أصلاً.
+             * أي خطأ آخر (رمز منتهي، Flood Wait، تحقق بريد مطلوب، ...) يوقف
+             * المحاولة نهائياً بدل إعادة المحاولة الصامتة.
+             */
+            const rawCode = error?.errorMessage;
+            const recoverable = rawCode === "PHONE_CODE_INVALID" ||
+                rawCode === "PASSWORD_HASH_INVALID" ||
+                error.message.includes("PHONE_CODE_INVALID") ||
+                error.message.includes("PASSWORD_HASH_INVALID");
+            return !recoverable;
         }
     })
         .then(async () => {
@@ -197,6 +250,13 @@ export async function beginLogin(stormUserId, telegramId, phone) {
         }
         await new Promise(resolve => setTimeout(resolve, 25));
     }
+    /*
+     * إذا فشل تسجيل الدخول قبل وصولنا لمرحلة طلب الرمز أصلاً (مثال: حساب
+     * يتطلب تحقق بريد إلكتروني غير مدعوم)، لا نُرجع نجاحاً وهمياً.
+     */
+    if (pending.status === "failed") {
+        throw pending.error ?? new Error("TELEGRAM_LOGIN_FAILED");
+    }
     return { deliveredToApp: Boolean(pending.isCodeViaApp) };
 }
 export async function submitLoginCode(telegramId, code) {
@@ -212,9 +272,7 @@ export async function submitLoginCode(telegramId, code) {
         throw new Error("CODE_NOT_REQUESTED");
     pending.codeResolver = null;
     resolver(normalized);
-    return new Promise((resolve) => {
-        pending.waitResolver = resolve;
-    });
+    return waitForLoginStep(telegramId, pending);
 }
 export async function submitLoginPassword(telegramId, password) {
     const pending = pendingLogins.get(telegramId);
@@ -227,9 +285,7 @@ export async function submitLoginPassword(telegramId, password) {
         throw new Error("PASSWORD_NOT_REQUESTED");
     pending.passwordResolver = null;
     resolver(password.trim());
-    return new Promise((resolve) => {
-        pending.waitResolver = resolve;
-    });
+    return waitForLoginStep(telegramId, pending);
 }
 export function cancelLogin(telegramId) {
     const pending = pendingLogins.get(telegramId);

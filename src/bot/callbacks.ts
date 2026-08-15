@@ -365,6 +365,7 @@ export async function handleCallbacks(ctx: BotContext) {
         show_alert: true
       });
       return;
+
     }
 
     try {
@@ -793,6 +794,7 @@ if (action?.startsWith("publish_saved:")) {
     await showChannelList(ctx);
     return;
   }
+
 
   if (action === "admin_channel_delete") {
     if (!(await isAdmin(ctx.from.id))) return;

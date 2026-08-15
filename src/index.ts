@@ -52,11 +52,16 @@ async function main() {
 
   await bot.api.deleteWebhook({ drop_pending_updates: true });
 
-  bot.start({
-    onStart: (info) => {
-      console.log(`Telegram bot started: @${info.username}`);
-    }
-  });
+  /*
+   * مهم: نستخدم run() من @grammyjs/runner بدل bot.start() لمعالجة تحديثات
+   * Telegram بالتوازي. كانت bot.start() (وهي المكتبة الأساسية في grammy)
+   * تعالج التحديثات بالتتابع: طلب واحد "عالق" (مثل تسجيل دخول ينتظر بلا
+   * نهاية) كان يمنع البوت بالكامل عن معالجة أي رسالة من أي مستخدم آخر إلى
+   * أن ينتهي. run() يعالج كل محادثة بشكل مستقل ومتوازٍ.
+   */
+  await bot.init();
+  console.log(`Telegram bot started: @${bot.botInfo.username}`);
+  run(bot);
 
   app.listen(env.PORT, () => {
     console.log(`API running on port ${env.PORT}`);

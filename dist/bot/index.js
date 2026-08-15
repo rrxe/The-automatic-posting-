@@ -1,10 +1,22 @@
 import { Bot } from "grammy";
+import { sequentialize } from "@grammyjs/runner";
 import { env } from "../config/env.js";
 import { handleStart } from "./start.js";
 import { handleCallbacks } from "./callbacks.js";
 import { handleAdminText } from "./adminText.js";
 import { handleMessageText } from "./messageComposer.js";
 export const bot = new Bot(env.BOT_TOKEN);
+/*
+ * نُشغّل البوت عبر run() من @grammyjs/runner (انظر index.ts) بدل bot.start()
+ * لمعالجة التحديثات بالتوازي، حتى لا يُجمّد مستخدم واحد عالق البوت بالكامل
+ * لبقية المستخدمين. sequentialize هنا تحافظ فقط على ترتيب رسائل *نفس*
+ * المستخدم/المحادثة، وتسمح بمعالجة مستخدمين مختلفين في نفس الوقت.
+ */
+bot.use(sequentialize((ctx) => {
+    const chat = ctx.chat?.id.toString();
+    const user = ctx.from?.id.toString();
+    return [chat, user].filter((v) => Boolean(v));
+}));
 bot.command("start", async (ctx) => {
     try {
         await handleStart(ctx);

@@ -282,7 +282,7 @@ export async function handleAdminText(ctx: BotContext) {
     }
 
     if (!Number.isInteger(days) || days <= 0 || days > 3650) {
-      await ctx.reply("❌ عدد الأيام يجب أن يكون بين 1 و3650.");
+  await ctx.reply("❌ عدد الأيام يجب أن يكون بين 1 و3650.");
       return;
     }
 
