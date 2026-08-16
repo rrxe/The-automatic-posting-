@@ -6,7 +6,7 @@ import helmet from "helmet";
 import { bot } from "./bot/index.js";
 import { env } from "./config/env.js";
 import { reconcileStuckPublishRuns } from "./services/publishControl.js";
-import { startIdleClientSweeper } from "./telegram/clientManager.js";
+import { startIdleClientSweeper, warmTelegramAccounts } from "./telegram/clientManager.js";
 const app = express();
 app.use(helmet());
 app.use(cors());
@@ -32,6 +32,16 @@ async function main() {
         console.log(`Reconciled ${reconciled} stuck publish run(s) from previous process.`);
     }
     startIdleClientSweeper();
+    /*
+     * يعيد الاتصال بكل الحسابات النشطة عند تشغيل السيرفر — هذا الاستدعاء
+     * كان ناقصاً (الدالة موجودة أصلاً بالكود لكن غير مستخدمة). فائدته الآن:
+     * أي حساب مربوط مسبقاً يلتقط بصمة الجهاز الجديدة (Linux/Web) فور إعادة
+     * تشغيل السيرفر، بدل ما ينتظر أول عملية نشر تلقائية تعيد الاتصال به.
+     * بالخلفية (بدون await) حتى لا يؤخر جاهزية السيرفر والبوت.
+     */
+    void warmTelegramAccounts().catch((error) => {
+        console.error("ACCOUNT WARMUP STARTUP ERROR:", error);
+    });
     await bot.api.deleteWebhook({ drop_pending_updates: true });
     /*
      * مهم: نستخدم run() من @grammyjs/runner بدل bot.start() لمعالجة تحديثات

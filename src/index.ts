@@ -11,7 +11,8 @@ import {
 } from "./services/publishControl.js";
 
 import {
-  startIdleClientSweeper
+  startIdleClientSweeper,
+  warmTelegramAccounts
 } from "./telegram/clientManager.js";
 
 const app = express();
@@ -49,6 +50,17 @@ async function main() {
   }
 
   startIdleClientSweeper();
+
+  /*
+   * يعيد الاتصال بكل الحسابات النشطة عند تشغيل السيرفر — هذا الاستدعاء
+   * كان ناقصاً (الدالة موجودة أصلاً بالكود لكن غير مستخدمة). فائدته الآن:
+   * أي حساب مربوط مسبقاً يلتقط بصمة الجهاز الجديدة (Linux/Web) فور إعادة
+   * تشغيل السيرفر، بدل ما ينتظر أول عملية نشر تلقائية تعيد الاتصال به.
+   * بالخلفية (بدون await) حتى لا يؤخر جاهزية السيرفر والبوت.
+   */
+  void warmTelegramAccounts().catch((error) => {
+    console.error("ACCOUNT WARMUP STARTUP ERROR:", error);
+  });
 
   await bot.api.deleteWebhook({ drop_pending_updates: true });
 
