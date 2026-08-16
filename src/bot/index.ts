@@ -8,6 +8,7 @@ import { handleAdminText } from "./adminText.js";
 import {
   handleMessageText
 } from "./messageComposer.js";
+import { handleBroadcastPhoto } from "./broadcast.js";
 
 import type { BotContext } from "../types/bot.js";
 
@@ -104,6 +105,24 @@ bot.on(
     }
 
     await next();
+  }
+);
+
+bot.on(
+  "message:photo",
+  async (ctx) => {
+    try {
+      /*
+       * حالياً الاستخدام الوحيد للصور بالبوت هو تركيب رسالة جماعية
+       * (قسم الإدارة). أي صورة تصل خارج هذا السياق تُتجاهل بصمت.
+       */
+      await handleBroadcastPhoto(ctx);
+    } catch (error) {
+      console.error(
+        "PHOTO HANDLER ERROR:",
+        error
+      );
+    }
   }
 );
 

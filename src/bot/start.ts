@@ -6,7 +6,7 @@ import { checkAllRequiredChannels } from "../services/membership.js";
 import { confirmReferral, processReferralRewards } from "../services/referrals.js";
 import { getAppSettings } from "../services/settings.js";
 import { bot } from "./index.js";
-import { sendDashboard } from "./dashboard.js";
+import { sendDashboard, sendSecurityInfo } from "./dashboard.js";
 import { cancelAllActions } from "../services/actionManager.js";
 
 function parseReferral(match: unknown): number | null {
@@ -117,6 +117,8 @@ export async function handleStart(ctx: BotContext) {
   const activeVip =
     !!fresh.vip_expires_at &&
     new Date(fresh.vip_expires_at) > new Date();
+
+  await sendSecurityInfo(ctx);
 
   await sendDashboard(ctx);
 }

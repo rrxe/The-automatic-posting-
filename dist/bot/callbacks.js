@@ -1,6 +1,6 @@
 import { InlineKeyboard } from "grammy";
 import { bot } from "./index.js";
-import { sendDashboard } from "./dashboard.js";
+import { sendDashboard, sendSecurityInfo } from "./dashboard.js";
 import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
 import { startMessageComposer, chooseMessageAccount, startNewMessage, startMyMessages, showSavedMessages, chooseSavedMessage, deleteSavedMessage, showMyMessages, viewMyMessage } from "./messageComposer.js";
@@ -18,10 +18,12 @@ import { getReferralStats } from "../services/referrals.js";
 import { clearUserAction } from "../services/userActions.js";
 import { setAdminAction, clearAdminAction, getMandatoryChannels, deleteMandatoryChannel } from "../services/adminChannels.js";
 import { isAdmin, isOwner } from "../services/admin.js";
+import { startBroadcastCompose, confirmBroadcast, cancelBroadcast } from "./broadcast.js";
 async function sendAdminPanel(ctx) {
     await ctx.reply("👑 لوحة الإدارة\n\n" + "إدارة كاملة للمستخدمين والاشتراكات والإعدادات:", {
         reply_markup: new InlineKeyboard()
             .text("📢 القنوات الإلزامية", "admin_channels")
+            .text("📣 رسالة جماعية", "admin_broadcast")
             .row()
             .text("⭐ إدارة VIP", "admin_vip")
             .text("👥 المستخدمون", "admin_users")
@@ -108,6 +110,23 @@ export async function handleCallbacks(ctx) {
     }
     const action = callback.data;
     if (await handleAdminExtraCallback(ctx)) {
+        return;
+    }
+    if (action === "admin_broadcast") {
+        await startBroadcastCompose(ctx);
+        return;
+    }
+    if (action === "broadcast_confirm") {
+        await confirmBroadcast(ctx);
+        return;
+    }
+    if (action === "broadcast_cancel") {
+        await cancelBroadcast(ctx);
+        return;
+    }
+    if (action === "security_info") {
+        await ctx.answerCallbackQuery();
+        await sendSecurityInfo(ctx);
         return;
     }
     if (action === "create_message") {

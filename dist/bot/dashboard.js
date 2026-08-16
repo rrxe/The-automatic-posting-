@@ -4,6 +4,28 @@ import { getAppSettings } from "../services/settings.js";
 import { getUserTelegramAccounts } from "../telegram/clientManager.js";
 import { getDailyPublishCount } from "../services/posts.js";
 import { getActiveRunForUser } from "../services/publishControl.js";
+import { isAdmin } from "../services/admin.js";
+export async function sendSecurityInfo(ctx) {
+    await ctx.reply("🔐 أمان حسابك وخصوصيتك أولويتنا\n\n" +
+        "ربط حسابك يتم عبر اتصال رسمي مباشر مع Telegram، وبيانات الجلسة تُحفظ بشكل مشفّر.\n\n" +
+        "🛡️ حماية الجلسة\n" +
+        "جلسة حسابك على Telegram تُشفَّر قبل حفظها في قاعدة البيانات، ولا تُخزَّن مكشوفة أبداً.\n\n" +
+        "🔒 المفاتيح السرية\n" +
+        "مفاتيح التشفير وتوكن البوت محفوظة كمتغيرات بيئة على السيرفر فقط — غير ظاهرة لأي واجهة أو مستخدم.\n\n" +
+        "👤 عزل الحسابات\n" +
+        "كل حساب Telegram له جلسة مستقلة خاصة بصاحبه فقط، ولا تُعرض أو تُشارك مع أي مستخدم آخر.\n\n" +
+        "🚫 كلمة مرورك محمية\n" +
+        "تسجيل الدخول يتم عبر نظام Telegram نفسه (رقم + رمز). لا نطلب كلمة مرور حسابك إطلاقاً، إلا إذا كان التحقق بخطوتين مفعّلاً من طرفك على Telegram — وحتى في هذه الحالة تُستخدم لحظياً لإكمال الدخول فقط، ولا تُخزَّن عندنا نهائياً.\n\n" +
+        "🧹 تنظيف الجلسات المنتهية\n" +
+        "إذا انتهت صلاحية جلسة حساب أو قيّدته Telegram، يتم إيقافه تلقائياً وإشعارك لإعادة ربطه.\n\n" +
+        "🌐 اتصال مشفّر\n" +
+        "التواصل مع خوادم Telegram يتم عبر بروتوكول Telegram المشفّر (MTProto).\n\n" +
+        "⚠️ تنبيه مهم: لا ترسل رمز تسجيل الدخول أو كلمة مرور التحقق بخطوتين لأي شخص، حتى لو ادّعى أنه من الدعم — العملية الآمنة الوحيدة تتم داخل هذا البوت مباشرة.\n\n" +
+        "باختصار: بياناتك غير معروضة لأحد، وجلستك محمية بالتشفير والعزل الكامل بين الحسابات. 🔐", {
+        reply_markup: new InlineKeyboard()
+            .text("🏠 الرئيسية", "dashboard")
+    });
+}
 export async function sendDashboard(ctx) {
     if (!ctx.from)
         return;
@@ -62,26 +84,27 @@ export async function sendDashboard(ctx) {
         .text("👥 الإحالات", "referrals")
         .text("📊 سجل النشر", "publish_history")
         .row()
-        .text("⚙️ حسابي", "account");
-    if (ctx.from.id ===
-        Number(process.env.OWNER_TELEGRAM_ID)) {
+        .text("⚙️ حسابي", "account")
+        .text("🔐 الأمان والخصوصية", "security_info");
+    if (await isAdmin(ctx.from.id)) {
         keyboard
             .row()
             .text("👑 لوحة الإدارة", "admin_panel");
     }
-    await ctx.reply("🚀 أهلاً بك في نشر تلقائي!\n\n" +
+    await ctx.reply("🚀 نشر تلقائي\n\n" +
         "أداة سهلة لإدارة ونشر منشوراتك\n" +
         "في مجموعاتك المحددة.\n\n" +
-        `📦 الباقة: ${vip
+        "──────────\n\n" +
+        `📦 باقتك: ${vip
             ? "⭐ VIP"
-            : "🆓 مجاني"}\n` +
-        `👤 الحسابات: ${accounts.length} / ${accountLimit}\n` +
-        `📣 حد المجموعات: ${groupLimit}\n` +
-        `▶️ التشغيلات: ${displayedUsed} / ${dailyLimit}\n` +
-        `⏳ المتبقي: ${dailyRemaining}\n` +
-        `🔄 الدورات لكل تشغيل: ${cycleLimit}\n` +
-        `⏱ الانتظار بين الدورات: ${cycleDelay} دقيقة\n\n` +
-        "👇 اختر الخدمة التي تريدها:", {
+            : "🆓 مجاني"}\n\n` +
+        "📊 الاستخدام\n" +
+        `👤 الحسابات: ${accounts.length} من ${accountLimit}\n` +
+        `▶️ التشغيلات اليوم: ${displayedUsed} من ${dailyLimit} (متبقي ${dailyRemaining})\n` +
+        `🔄 الدورات لكل تشغيل: ${cycleLimit} — انتظار ${cycleDelay} دقيقة بينها\n` +
+        `📣 حد المجموعات: ${groupLimit}\n\n` +
+        "──────────\n\n" +
+        "👇 اختر من القائمة:", {
         reply_markup: keyboard
     });
 }

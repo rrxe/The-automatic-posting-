@@ -5,6 +5,7 @@ import { handleStart } from "./start.js";
 import { handleCallbacks } from "./callbacks.js";
 import { handleAdminText } from "./adminText.js";
 import { handleMessageText } from "./messageComposer.js";
+import { handleBroadcastPhoto } from "./broadcast.js";
 export const bot = new Bot(env.BOT_TOKEN);
 /*
  * نُشغّل البوت عبر run() من @grammyjs/runner (انظر index.ts) بدل bot.start()
@@ -64,6 +65,18 @@ bot.on("message:text", async (ctx, next) => {
         console.error("TEXT HANDLER ERROR:", error);
     }
     await next();
+});
+bot.on("message:photo", async (ctx) => {
+    try {
+        /*
+         * حالياً الاستخدام الوحيد للصور بالبوت هو تركيب رسالة جماعية
+         * (قسم الإدارة). أي صورة تصل خارج هذا السياق تُتجاهل بصمت.
+         */
+        await handleBroadcastPhoto(ctx);
+    }
+    catch (error) {
+        console.error("PHOTO HANDLER ERROR:", error);
+    }
 });
 bot.catch((error) => {
     console.error("BOT ERROR:", error);

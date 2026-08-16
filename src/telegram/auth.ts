@@ -30,9 +30,9 @@ const pendingLogins = new Map<number, PendingLogin>();
 function createTelegramClient(session: string = "") {
   const options: any = {
     connectionRetries: 5,
-    deviceModel: env.TELEGRAM_DEVICE_MODEL || "iPhone 14 Pro",
-    systemVersion: env.TELEGRAM_SYSTEM_VERSION || "iOS 16.5",
-    appVersion: env.TELEGRAM_APP_VERSION || "10.10.0",
+    deviceModel: env.TELEGRAM_DEVICE_MODEL || "Web",
+    systemVersion: env.TELEGRAM_SYSTEM_VERSION || "Linux",
+    appVersion: env.TELEGRAM_APP_VERSION || "2.1.5",
     langCode: env.TELEGRAM_LANG_CODE || "en",
     systemLangCode: env.TELEGRAM_SYSTEM_LANG_CODE || "en-US"
   };
@@ -129,7 +129,6 @@ async function saveTelegramAccount(pending: PendingLogin) {
     .select("id, user_id")
     .eq("telegram_user_id", telegramUserId)
     .maybeSingle();
-
 
   if (lookupError) {
     throw new Error(lookupError.message);
@@ -275,8 +274,26 @@ export async function beginLogin(stormUserId: string, telegramId: number, phone:
         pending.error = error;
         console.error("TELEGRAM LOGIN FLOW ERROR:", { telegramId, message: error.message });
 
+        /*
+         * هذا هو سبب تجمّد البوت بالكامل سابقاً: كانت هذه الدالة ترجع false
+         * دائماً، فكانت مكتبة teleproto تُعيد طلب الرمز داخلياً بصمت (حلقة
+         * while(1) داخلية) دون أن تُخبر كودنا بأي شيء. النتيجة: أي خطأ أثناء
+         * تسجيل الدخول (رمز خاطئ، رمز منتهي، ...) كان يترك submitLoginCode
+         * منتظراً إلى الأبد، ولأن البوت يعالج التحديثات بالتتابع (bot.start)
+         * كان هذا الانتظار الأبدي يُجمّد الاستخدام كاملاً لكل المستخدمين.
+         *
+         * الإصلاح: نُحرر submitLoginCode/submitLoginPassword فوراً بغض النظر
+         * عن قرار teleproto التالي.
+         */
         finishWait(telegramId, { status: "failed", error });
 
+        /*
+         * "الرمز خاطئ" أو "كلمة مرور 2FA خاطئة" فقط: نسمح لـ teleproto بإعادة
+         * الطلب على نفس الجلسة (المستخدم يرسل رمزاً/كلمة مرور جديدة دون إعادة
+         * إدخال رقم الهاتف من جديد) — تماماً كما يفترض adminText.ts أصلاً.
+         * أي خطأ آخر (رمز منتهي، Flood Wait، تحقق بريد مطلوب، ...) يوقف
+         * المحاولة نهائياً بدل إعادة المحاولة الصامتة.
+         */
         const rawCode = (error as any)?.errorMessage;
         const recoverable =
           rawCode === "PHONE_CODE_INVALID" ||
@@ -326,6 +343,10 @@ export async function beginLogin(stormUserId: string, telegramId: number, phone:
     await new Promise(resolve => setTimeout(resolve, 25));
   }
 
+  /*
+   * إذا فشل تسجيل الدخول قبل وصولنا لمرحلة طلب الرمز أصلاً (مثال: حساب
+   * يتطلب تحقق بريد إلكتروني غير مدعوم)، لا نُرجع نجاحاً وهمياً.
+   */
   if (pending.status === "failed") {
     throw pending.error ?? new Error("TELEGRAM_LOGIN_FAILED");
   }

@@ -10,9 +10,9 @@ const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
 function createTelegramClient(session = "") {
     const options = {
         connectionRetries: 5,
-        deviceModel: env.TELEGRAM_DEVICE_MODEL || "iPhone 14 Pro",
-        systemVersion: env.TELEGRAM_SYSTEM_VERSION || "iOS 16.5",
-        appVersion: env.TELEGRAM_APP_VERSION || "10.10.0",
+        deviceModel: env.TELEGRAM_DEVICE_MODEL || "Web",
+        systemVersion: env.TELEGRAM_SYSTEM_VERSION || "Linux",
+        appVersion: env.TELEGRAM_APP_VERSION || "2.1.5",
         langCode: env.TELEGRAM_LANG_CODE || "en",
         systemLangCode: env.TELEGRAM_SYSTEM_LANG_CODE || "en-US",
         entityCache: {

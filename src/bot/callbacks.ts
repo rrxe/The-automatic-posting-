@@ -1,7 +1,7 @@
 import { InlineKeyboard } from "grammy";
 import type { BotContext } from "../types/bot.js";
 import { bot } from "./index.js";
-import { sendDashboard } from "./dashboard.js";
+import { sendDashboard, sendSecurityInfo } from "./dashboard.js";
 import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
 import {
@@ -53,6 +53,11 @@ import {
   deleteMandatoryChannel
 } from "../services/adminChannels.js";
 import { isAdmin, isOwner } from "../services/admin.js";
+import {
+  startBroadcastCompose,
+  confirmBroadcast,
+  cancelBroadcast
+} from "./broadcast.js";
 
 async function sendAdminPanel(ctx: BotContext) {
   await ctx.reply(
@@ -60,6 +65,7 @@ async function sendAdminPanel(ctx: BotContext) {
     {
       reply_markup: new InlineKeyboard()
         .text("📢 القنوات الإلزامية", "admin_channels")
+        .text("📣 رسالة جماعية", "admin_broadcast")
         .row()
         .text("⭐ إدارة VIP", "admin_vip")
         .text("👥 المستخدمون", "admin_users")
@@ -166,6 +172,27 @@ export async function handleCallbacks(ctx: BotContext) {
   const action = callback.data;
 
   if (await handleAdminExtraCallback(ctx)) {
+    return;
+  }
+
+  if (action === "admin_broadcast") {
+    await startBroadcastCompose(ctx);
+    return;
+  }
+
+  if (action === "broadcast_confirm") {
+    await confirmBroadcast(ctx);
+    return;
+  }
+
+  if (action === "broadcast_cancel") {
+    await cancelBroadcast(ctx);
+    return;
+  }
+
+  if (action === "security_info") {
+    await ctx.answerCallbackQuery();
+    await sendSecurityInfo(ctx);
     return;
   }
 
@@ -365,7 +392,6 @@ export async function handleCallbacks(ctx: BotContext) {
         show_alert: true
       });
       return;
-
     }
 
     try {
@@ -794,7 +820,6 @@ if (action?.startsWith("publish_saved:")) {
     await showChannelList(ctx);
     return;
   }
-
 
   if (action === "admin_channel_delete") {
     if (!(await isAdmin(ctx.from.id))) return;

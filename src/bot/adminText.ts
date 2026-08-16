@@ -21,6 +21,8 @@ import {
 import { getUserByTelegramId } from "../services/users.js";
 import { handlePostText } from "./postFlow.js";
 import { prepareChatAdd } from "../services/chatAdd.js";
+import { handleBroadcastComposeText } from "./broadcast.js";
+import { revokeVip, findUser } from "../services/adminManagement.js";
 
 export async function handleAdminText(ctx: BotContext) {
   if (!ctx.from || !ctx.message?.text) {
@@ -92,7 +94,6 @@ export async function handleAdminText(ctx: BotContext) {
     return;
   }
 
-
   if (userAction === "telegram_phone") {
     try {
       const user = await getUserByTelegramId(telegramId);
@@ -161,6 +162,7 @@ export async function handleAdminText(ctx: BotContext) {
       const result = await submitLoginCode(telegramId, text);
 
       if (result.status === "password") {
+        /* auth.ts غيّر الحالة إلى telegram_password. */
         await ctx.reply(
           "🔐 الحساب محمي بالتحقق بخطوتين.\n\n" +
             "أرسل الآن كلمة مرور 2FA الخاصة بحسابك.\n\n" +
@@ -268,6 +270,73 @@ export async function handleAdminText(ctx: BotContext) {
     return;
   }
 
+  if (adminAction === "broadcast_compose") {
+    await handleBroadcastComposeText(ctx, text);
+    return;
+  }
+
+  /*
+   * سحب VIP والبحث عن مستخدم: أزرارهما كانت تطلب من المستخدم إرسال
+   * Telegram ID، لكن لا شيء كان يستقبل الرد فعلياً (الفرع الوحيد الذي
+   * يقرأه كان بملف adminExtras.ts غير المفعّل فعلياً في مسار الرسائل).
+   */
+  if (adminAction === "vip_revoke") {
+    const targetId = Number(text.trim());
+
+    if (!Number.isSafeInteger(targetId) || targetId <= 0) {
+      await ctx.reply("❌ Telegram ID غير صحيح.");
+      return;
+    }
+
+    try {
+      await revokeVip(telegramId, targetId);
+      await clearAdminAction(telegramId);
+
+      await ctx.reply(
+        "✅ تم سحب VIP بنجاح.\n\n" + `👤 Telegram ID: ${targetId}`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+
+      await ctx.reply(
+        message === "USER_NOT_FOUND"
+          ? "❌ لم أجد هذا المستخدم."
+          : "❌ تعذر سحب VIP."
+      );
+    }
+
+    return;
+  }
+
+  if (adminAction === "vip_search" || adminAction === "admin_user_search") {
+    const found = await findUser(text);
+    await clearAdminAction(telegramId);
+
+    if (!found) {
+      await ctx.reply("❌ لم أجد المستخدم.");
+      return;
+    }
+
+    const activeVip =
+      found.plan === "vip" &&
+      !!found.vip_expires_at &&
+      new Date(found.vip_expires_at) > new Date();
+
+    await ctx.reply(
+      "👤 معلومات المستخدم\n\n" +
+        `🆔 ${found.telegram_id}\n` +
+        `👤 ${found.username ? `@${found.username}` : found.first_name || "بدون اسم"}\n` +
+        `📦 ${activeVip ? "⭐ VIP" : "🆓 Free"}\n` +
+        `📅 ${found.vip_expires_at || "لا يوجد VIP"}`
+    );
+
+    return;
+  }
+
+  /*
+   * VIP grant — تتم معالجته مباشرة قبل بقية إعدادات النص حتى لا يسقط
+   * بصمت بسبب أي setting map آخر.
+   */
   if (adminAction === "vip_grant") {
     const parts = text.trim().split(/\s+/);
 
@@ -346,6 +415,9 @@ export async function handleAdminText(ctx: BotContext) {
     return;
   }
 
+  /* ================================
+   * إدارة المشرفين
+   * ================================ */
   if (adminAction === "admin_add") {
     if (!(await (await import("../services/admin.js")).isOwner(telegramId))) {
       await clearAdminAction(telegramId);
