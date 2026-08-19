@@ -9,6 +9,7 @@ import { handlePostText } from "./postFlow.js";
 import { prepareChatAdd } from "../services/chatAdd.js";
 import { handleBroadcastComposeText } from "./broadcast.js";
 import { revokeVip, findUser } from "../services/adminManagement.js";
+import { sendDashboard } from "./dashboard.js";
 export async function handleAdminText(ctx) {
     if (!ctx.from || !ctx.message?.text) {
         return;
@@ -25,7 +26,7 @@ export async function handleAdminText(ctx) {
      * حساب Telegram
      * ================================ */
     const userAction = await getUserAction(telegramId);
-    /* إضافة مجموعة للحساب */
+    /* إضافة مجموعة (تدعم عدة روابط دفعة وحدة، سطر لكل رابط) */
     if (userAction?.startsWith("add_chat:")) {
         const accountId = userAction.slice("add_chat:".length);
         try {
@@ -34,15 +35,36 @@ export async function handleAdminText(ctx) {
                 await clearUserAction(telegramId);
                 return;
             }
-            const result = await prepareChatAdd(telegramId, user.id, accountId, text);
-            await ctx.reply("🔎 تم التحقق من الوجهة.\n\n" +
-                `📣 ${result.title}` +
-                (result.username ? `\n🔗 ${result.username}` : "") +
-                "\n\n" +
-                "هل تريد حفظ هذه المجموعة عند حسابك؟\n" +
-                "⚠️ لازم يكون الحساب منضم لها فعلاً (يدوياً من التطبيق) — البوت ما يحاول الانضمام تلقائياً.", {
+            const summary = await prepareChatAdd(telegramId, user.id, accountId, text);
+            if (!summary.resolved.length) {
+                let message = "❌ ما قدرت أتحقق من أي رابط أرسلته.\n\n";
+                message += summary.failed
+                    .map((f) => `• ${f.input}\n  ↳ ${f.reason}`)
+                    .join("\n");
+                message += "\n\nأرسل الروابط مرة أخرى (رابط أو Username لكل سطر).";
+                await ctx.reply(message);
+                return;
+            }
+            let message = `🔎 فحصت ${summary.resolved.length + summary.failed.length} رابط:\n\n`;
+            message +=
+                `✅ صالحة (${summary.resolved.length}):\n` +
+                    summary.resolved
+                        .map((g) => `• ${g.title}${g.username ? ` ${g.username}` : ""}`)
+                        .join("\n");
+            if (summary.failed.length) {
+                message +=
+                    `\n\n❌ فشلت (${summary.failed.length}):\n` +
+                        summary.failed.map((f) => `• ${f.input}\n  ↳ ${f.reason}`).join("\n");
+            }
+            if (summary.truncated > 0) {
+                message += `\n\n⚠️ الحد الأقصى 20 رابط بكل دفعة — تجاهلت ${summary.truncated} سطر زيادة، أرسلهم بدفعة ثانية بعدين.`;
+            }
+            message +=
+                "\n\n⚠️ لازم يكون الحساب منضم فعلاً لهذي الوجهات (يدوياً من التطبيق) — البوت ما يحاول الانضمام تلقائياً." +
+                    "\n\nهل تريد حفظ الصالحة؟";
+            await ctx.reply(message, {
                 reply_markup: new InlineKeyboard()
-                    .text("✅ حفظ المجموعة", "chat_confirm")
+                    .text(`✅ حفظ (${summary.resolved.length})`, "chat_confirm")
                     .row()
                     .text("❌ إلغاء", "chat_cancel")
             });
@@ -52,9 +74,11 @@ export async function handleAdminText(ctx) {
             const { cancelChatAdd } = await import("../services/chatAdd.js");
             cancelChatAdd(telegramId);
             const message = error instanceof Error ? error.message : "";
-            await ctx.reply(message === "INVALID_CHAT_INPUT"
-                ? "❌ أرسل Username أو رابط Telegram صحيح."
-                : "❌ لم أتمكن من العثور على هذه المجموعة.");
+            await ctx.reply(message === "EMPTY_CHAT"
+                ? "❌ أرسل رابطاً أو Username واحداً على الأقل."
+                : message.includes("TELEGRAM_SESSION_EXPIRED")
+                    ? "⚠️ انتهت صلاحية جلسة هذا الحساب على Telegram.\n\nأضفه من جديد من «➕ إضافة حساب»."
+                    : "❌ حدث خطأ أثناء التحقق من الروابط.");
         }
         return;
     }
@@ -124,6 +148,7 @@ export async function handleAdminText(ctx) {
                 await clearUserAction(telegramId);
                 await ctx.reply("🎉 تم تسجيل حساب Telegram بنجاح!\n\n" +
                     "✅ الحساب أصبح مرتبطاً بحسابك في نشر تلقائي.");
+                await sendDashboard(ctx);
                 return;
             }
             if (result.status === "failed") {
@@ -150,7 +175,9 @@ export async function handleAdminText(ctx) {
             }
             cancelLogin(telegramId);
             await clearUserAction(telegramId);
-            await ctx.reply("❌ تعذر تسجيل الدخول.\n\nابدأ عملية إضافة الحساب من جديد.");
+            await ctx.reply("❌ تعذر تسجيل الدخول.\n\nابدأ عملية إضافة الحساب من جديد.", {
+                reply_markup: new InlineKeyboard().text("🏠 الرئيسية", "dashboard")
+            });
             console.error("CODE LOGIN ERROR:", error);
         }
         return;
@@ -163,6 +190,7 @@ export async function handleAdminText(ctx) {
                 await clearUserAction(telegramId);
                 await ctx.reply("🎉 تم تسجيل حساب Telegram بنجاح!\n\n" +
                     "✅ الحساب أصبح مرتبطاً بحسابك في نشر تلقائي.");
+                await sendDashboard(ctx);
                 return;
             }
             if (result.status === "password") {
@@ -181,7 +209,9 @@ export async function handleAdminText(ctx) {
             }
             cancelLogin(telegramId);
             await clearUserAction(telegramId);
-            await ctx.reply("❌ تعذر إكمال تسجيل الدخول.\n\nابدأ عملية إضافة الحساب من جديد.");
+            await ctx.reply("❌ تعذر إكمال تسجيل الدخول.\n\nابدأ عملية إضافة الحساب من جديد.", {
+                reply_markup: new InlineKeyboard().text("🏠 الرئيسية", "dashboard")
+            });
             console.error("2FA ERROR:", error);
         }
         return;
@@ -201,6 +231,7 @@ export async function handleAdminText(ctx) {
         return;
     }
     /*
+  
      * سحب VIP والبحث عن مستخدم: أزرارهما كانت تطلب من المستخدم إرسال
      * Telegram ID، لكن لا شيء كان يستقبل الرد فعلياً (الفرع الوحيد الذي
      * يقرأه كان بملف adminExtras.ts غير المفعّل فعلياً في مسار الرسائل).
@@ -214,7 +245,9 @@ export async function handleAdminText(ctx) {
         try {
             await revokeVip(telegramId, targetId);
             await clearAdminAction(telegramId);
-            await ctx.reply("✅ تم سحب VIP بنجاح.\n\n" + `👤 Telegram ID: ${targetId}`);
+            await ctx.reply("✅ تم سحب VIP بنجاح.\n\n" + `👤 Telegram ID: ${targetId}`, {
+                reply_markup: new InlineKeyboard().text("👑 لوحة الإدارة", "admin_panel")
+            });
         }
         catch (error) {
             const message = error instanceof Error ? error.message : "";
@@ -238,7 +271,9 @@ export async function handleAdminText(ctx) {
             `🆔 ${found.telegram_id}\n` +
             `👤 ${found.username ? `@${found.username}` : found.first_name || "بدون اسم"}\n` +
             `📦 ${activeVip ? "⭐ VIP" : "🆓 Free"}\n` +
-            `📅 ${found.vip_expires_at || "لا يوجد VIP"}`);
+            `📅 ${found.vip_expires_at || "لا يوجد VIP"}`, {
+            reply_markup: new InlineKeyboard().text("👑 لوحة الإدارة", "admin_panel")
+        });
         return;
     }
     /*
@@ -268,7 +303,9 @@ export async function handleAdminText(ctx) {
             await ctx.reply("✅ تم منح VIP بنجاح.\n\n" +
                 `👤 Telegram ID: ${targetId}\n` +
                 `⭐ المدة: ${days} يوم\n` +
-                `📅 الانتهاء: ${expires.toISOString()}`);
+                `📅 الانتهاء: ${expires.toISOString()}`, {
+                reply_markup: new InlineKeyboard().text("👑 لوحة الإدارة", "admin_panel")
+            });
         }
         catch (error) {
             console.error("VIP GRANT ERROR:", error);
@@ -288,7 +325,9 @@ export async function handleAdminText(ctx) {
             await clearAdminAction(telegramId);
             await ctx.reply("✅ تمت إضافة القناة بنجاح.\n\n" +
                 `📢 ${channel.title || "بدون اسم"}\n` +
-                `🔗 ${channel.username || channel.chat_id}`);
+                `🔗 ${channel.username || channel.chat_id}`, {
+                reply_markup: new InlineKeyboard().text("👑 لوحة الإدارة", "admin_panel")
+            });
         }
         catch (error) {
             const message = error instanceof Error ? error.message : "UNKNOWN";
@@ -323,7 +362,9 @@ export async function handleAdminText(ctx) {
             await clearAdminAction(telegramId);
             await ctx.reply("✅ تم إضافة المشرف بنجاح.\n\n" +
                 `🆔 Telegram ID: ${targetTelegramId}\n` +
-                "🛡 الصلاحية: Admin");
+                "🛡 الصلاحية: Admin", {
+                reply_markup: new InlineKeyboard().text("👑 لوحة الإدارة", "admin_panel")
+            });
         }
         catch (error) {
             console.error("ADMIN ADD ERROR:", error);
@@ -352,7 +393,9 @@ export async function handleAdminText(ctx) {
             const { removeAdmin } = await import("../services/adminManagement.js");
             await removeAdmin(targetTelegramId);
             await clearAdminAction(telegramId);
-            await ctx.reply("✅ تمت إزالة المشرف بنجاح.\n\n" + `🆔 Telegram ID: ${targetTelegramId}`);
+            await ctx.reply("✅ تمت إزالة المشرف بنجاح.\n\n" + `🆔 Telegram ID: ${targetTelegramId}`, {
+                reply_markup: new InlineKeyboard().text("👑 لوحة الإدارة", "admin_panel")
+            });
         }
         catch (error) {
             console.error("ADMIN REMOVE ERROR:", error);
@@ -384,7 +427,7 @@ export async function handleAdminText(ctx) {
         set_vip_cycle_delay: { key: "vip_cycle_delay_minutes", label: "انتظار الدورات لـ VIP", integer: true, min: 0, max: 1440 },
         set_message_delay: { key: "message_delay_minutes", label: "التأخير بين الرسائل", integer: true, min: 0, max: 1440 },
         set_referral_7: { key: "referral_7_vip_days", label: "مكافأة 7 إحالات", integer: true, min: 1, max: 3650 },
-        set_referral_20: { key: "referral_20_vip_days", label: "مكافأة 20 إحالات", integer: true, min: 1, max: 3650 },
+        set_referral_20: { key: "referral_20_vip_days", label: "مكافأة 15 إحالة", integer: true, min: 1, max: 3650 },
         set_vip_price: { key: "vip_price_usdt", label: "سعر VIP", integer: false, min: 0.01, max: 100000 }
     };
     const setting = settingMap[adminAction];

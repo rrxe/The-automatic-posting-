@@ -1,4 +1,6 @@
 import { supabase } from "../db/supabase.js";
+import { getAppSettings } from "./settings.js";
+const TIER_2_REFERRAL_COUNT = 15;
 async function getConfirmedReferralCount(userId) {
     const { count, error } = await supabase
         .from("referrals")
@@ -85,17 +87,20 @@ export async function processReferralRewards(referrerUserId, referralCount) {
     if (error || !referrer) {
         return [];
     }
+    const settings = await getAppSettings();
     const rewards = [];
     if (referralCount >= 7) {
-        const granted = await grantReferralVip(referrer, "referral_7", 3);
+        const days = settings.referral_7_vip_days;
+        const granted = await grantReferralVip(referrer, "referral_7", days);
         if (granted) {
-            rewards.push(3);
+            rewards.push(days);
         }
     }
-    if (referralCount >= 20) {
-        const granted = await grantReferralVip(referrer, "referral_20", 7);
+    if (referralCount >= TIER_2_REFERRAL_COUNT) {
+        const days = settings.referral_20_vip_days;
+        const granted = await grantReferralVip(referrer, "referral_20", days);
         if (granted) {
-            rewards.push(7);
+            rewards.push(days);
         }
     }
     return rewards;
@@ -104,6 +109,10 @@ export async function getReferralStats(userId) {
     const count = await getConfirmedReferralCount(userId);
     return {
         count,
-        nextTarget: count < 7 ? 7 : count < 20 ? 20 : null
+        nextTarget: count < 7
+            ? 7
+            : count < TIER_2_REFERRAL_COUNT
+                ? TIER_2_REFERRAL_COUNT
+                : null
     };
 }

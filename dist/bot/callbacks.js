@@ -42,7 +42,7 @@ async function sendAdminSettings(ctx) {
         `📣 حد المجاني: ${settings.free_group_limit}\n` +
         `⭐ حد VIP: ${settings.vip_group_limit}\n` +
         `🎁 VIP عند 7 إحالات: ${settings.referral_7_vip_days} أيام\n` +
-        `🎁 VIP عند 20 إحالة: ${settings.referral_20_vip_days} أيام\n` +
+        `🎁 VIP عند 15 إحالة: ${settings.referral_20_vip_days} أيام\n` +
         `💰 سعر VIP: ${settings.vip_price_usdt} USDT\n\n` +
         "اختر الإعداد الذي تريد تغييره:", {
         reply_markup: new InlineKeyboard()
@@ -585,7 +585,7 @@ export async function handleCallbacks(ctx) {
             setting_free_limit: "📣 أرسل الآن حد المجموعات للمستخدم المجاني.\n\nمثال: 5",
             setting_vip_limit: "⭐ أرسل الآن حد المجموعات لـ VIP.\n\nمثال: 20",
             setting_ref7: "🎁 أرسل عدد أيام VIP التي يحصل عليها المستخدم عند 7 إحالات.",
-            setting_ref20: "🎁 أرسل عدد أيام VIP التي يحصل عليها المستخدم عند 20 إحالة.",
+            setting_ref20: "🎁 أرسل عدد أيام VIP التي يحصل عليها المستخدم عند 15 إحالة.",
             setting_price: "💰 أرسل سعر VIP الشهري بالـ USDT.\n\nمثال: 5"
         };
         await ctx.reply(messages[action]);
@@ -784,7 +784,7 @@ export async function handleCallbacks(ctx) {
                 `💰 السعر: ${settings.vip_price_usdt} USDT / 30 يوم\n` +
                 `📣 حد المجموعات: ${settings.vip_group_limit}\n\n` +
                 `🎁 7 إحالات → VIP ${settings.referral_7_vip_days} أيام\n` +
-                `🎁 20 إحالة → VIP ${settings.referral_20_vip_days} أيام`);
+                `🎁 15 إحالة → VIP ${settings.referral_20_vip_days} أيام`);
             break;
         }
         case "referrals": {
@@ -799,7 +799,7 @@ export async function handleCallbacks(ctx) {
                 `👤 الإحالات المؤكدة: ${stats.count}\n\n` +
                 "🎁 المكافآت:\n" +
                 `• 7 إحالات → VIP ${settings.referral_7_vip_days} أيام\n` +
-                `• 20 إحالة → VIP ${settings.referral_20_vip_days} أيام\n\n` +
+                `• 15 إحالة → VIP ${settings.referral_20_vip_days} أيام\n\n` +
                 "🔗 رابط دعوتك:\n" +
                 referralLink, {
                 reply_markup: new InlineKeyboard().url("📤 مشاركة رابط الدعوة", referralLink)

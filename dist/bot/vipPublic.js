@@ -13,7 +13,7 @@ export async function showPublicVip(ctx) {
         `⏳ التأخير بين الرسائل: ${settings.message_delay_minutes} دقائق\n\n` +
         "🎁 مكافآت الإحالات:\n" +
         `7 إحالات → VIP ${settings.referral_7_vip_days} أيام\n` +
-        `20 إحالة → VIP ${settings.referral_20_vip_days} أيام\n\n` +
+        `15 إحالة → VIP ${settings.referral_20_vip_days} أيام\n\n` +
         "💳 للشراء أو الاستفسار تواصل مع:\n" +
         "@ncryptix\n" +
         "أو\n" +

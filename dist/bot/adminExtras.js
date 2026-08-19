@@ -54,7 +54,7 @@ async function sendAdminSettings(ctx) {
         `🐢 التأخير بين الرسائل: ${settings.message_delay_minutes} دقيقة\n\n` +
         "🎁 الإحالات\n" +
         `7 إحالات → ${settings.referral_7_vip_days} أيام VIP\n` +
-        `20 إحالة → ${settings.referral_20_vip_days} أيام VIP\n\n` +
+        `15 إحالة → ${settings.referral_20_vip_days} أيام VIP\n\n` +
         `💰 سعر VIP: ${settings.vip_price_usdt} USDT`, {
         reply_markup: adminSettingsKeyboard()
     });
@@ -301,7 +301,7 @@ export async function handleAdminExtraCallback(ctx) {
         set_r20: {
             key: "referral_20_vip_days",
             action: "set_referral_20",
-            text: "🎁 أرسل عدد أيام VIP لمكافأة 20 إحالة."
+            text: "🎁 أرسل عدد أيام VIP لمكافأة 15 إحالة."
         },
         set_price: {
             key: "vip_price_usdt",

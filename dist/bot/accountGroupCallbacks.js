@@ -86,15 +86,15 @@ export async function handleAccountGroupCallback(ctx) {
         await ctx.answerCallbackQuery();
         await ctx.reply("➕ إضافة مجموعة\n\n" +
             "أرسل Username المجموعة أو رابط Telegram.\n\n" +
-            "أمثلة:\n" +
-            "@MyGroup\n" +
-            "https://t.me/MyGroup\n\n" +
-            "للمجموعات الخاصة:\n" +
+            "تقدر ترسل أكثر من واحد دفعة وحدة — رابط أو Username بكل سطر:\n\n" +
+            "مثال:\n" +
+            "@Group1\n" +
+            "https://t.me/Group2\n" +
             "https://t.me/+XXXXXXXX\n\n" +
-            "بعد إرسال الرابط سأتحقق منه أولاً.");
+            "بعد الإرسال بتحقق من كل واحدة وأعرض عليك ملخص قبل ما أضيف أي شي فعلياً.");
         return true;
     }
-    // تأكيد إضافة المجموعة
+    // تأكيد إضافة المجموعات
     if (action === "chat_confirm") {
         if (!ctx.from) {
             return true;
@@ -102,15 +102,29 @@ export async function handleAccountGroupCallback(ctx) {
         try {
             const result = await confirmChatAdd(ctx.from.id);
             await clearUserAction(ctx.from.id);
+            const total = result.activated.length +
+                result.addedInactive.length;
+            let message = `✅ تمت إضافة ${total} وجهة.\n\n`;
+            if (result.activated.length) {
+                message +=
+                    `✅ مفعّلة للنشر (${result.activated.length}):\n` +
+                        result.activated
+                            .map((g) => `• ${g.title}`)
+                            .join("\n") +
+                        "\n\n";
+            }
+            if (result.addedInactive.length) {
+                message +=
+                    `⏸ أُضيفت بدون تفعيل — وصلت حد باقتك (${result.addedInactive.length}):\n` +
+                        result.addedInactive
+                            .map((g) => `• ${g.title}`)
+                            .join("\n") +
+                        "\n\nتقدر تفعّلها لاحقاً من «📣 مجموعاتي» بعد ما توقف وجهة ثانية.\n\n";
+            }
             await ctx.answerCallbackQuery({
-                text: "✅ تمت إضافة المجموعة."
+                text: "✅ تم."
             });
-            await ctx.reply("✅ تمت إضافة المجموعة بنجاح.\n\n" +
-                `📣 ${result.title}\n` +
-                `🔗 ${result.username || result.telegramChatId}\n\n` +
-                (result.joined
-                    ? "✅ تم الانضمام بالحساب وإضافة المجموعة."
-                    : "✅ المجموعة أصبحت متاحة للحساب."), {
+            await ctx.reply(message, {
                 reply_markup: new InlineKeyboard()
                     .text("⚙️ حسابي", "account")
                     .row()
@@ -124,16 +138,12 @@ export async function handleAccountGroupCallback(ctx) {
             clearPendingChatAdd(ctx.from.id);
             await clearUserAction(ctx.from.id);
             await ctx.answerCallbackQuery({
-                text: "❌ تعذر إضافة المجموعة.",
+                text: "❌ تعذر إضافة المجموعات.",
                 show_alert: true
             });
-            await ctx.reply(message === "CHAT_NOT_FOUND"
-                ? "❌ لم أجد المجموعة أو الرابط غير صالح."
-                : message === "JOIN_MANUALLY_FIRST"
-                    ? "⚠️ الحساب لسا مو منضم لهذه المجموعة.\n\n" +
-                        "انضم أولاً يدوياً من تطبيق Telegram بنفس الحساب، وبعدين ارجع أضفها هنا — البوت ما يحاول الانضمام تلقائياً."
-                    : "❌ تعذر إضافة المجموعة.\n\n" +
-                        "تأكد من صحة الرابط وأن الحساب عضو فيها بالفعل.");
+            await ctx.reply(message === "NO_PENDING_CHAT"
+                ? "⚠️ انتهت صلاحية المعاينة. أرسل الروابط من جديد."
+                : "❌ تعذر إضافة المجموعات.\n\nحاول مرة أخرى.");
         }
         return true;
     }
