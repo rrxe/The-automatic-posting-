@@ -88,7 +88,7 @@ async function sendAdminSettings(ctx: BotContext) {
       `📣 حد المجاني: ${settings.free_group_limit}\n` +
       `⭐ حد VIP: ${settings.vip_group_limit}\n` +
       `🎁 VIP عند 7 إحالات: ${settings.referral_7_vip_days} أيام\n` +
-      `🎁 VIP عند 20 إحالة: ${settings.referral_20_vip_days} أيام\n` +
+      `🎁 VIP عند 15 إحالة: ${settings.referral_20_vip_days} أيام\n` +
       `💰 سعر VIP: ${settings.vip_price_usdt} USDT\n\n` +
       "اختر الإعداد الذي تريد تغييره:",
     {
@@ -200,6 +200,7 @@ export async function handleCallbacks(ctx: BotContext) {
     await startMessageComposer(ctx);
     return;
   }
+
 
   if (action === "run_publish") {
     if (ctx.from) {
@@ -782,7 +783,7 @@ if (action?.startsWith("publish_saved:")) {
       setting_free_limit: "📣 أرسل الآن حد المجموعات للمستخدم المجاني.\n\nمثال: 5",
       setting_vip_limit: "⭐ أرسل الآن حد المجموعات لـ VIP.\n\nمثال: 20",
       setting_ref7: "🎁 أرسل عدد أيام VIP التي يحصل عليها المستخدم عند 7 إحالات.",
-      setting_ref20: "🎁 أرسل عدد أيام VIP التي يحصل عليها المستخدم عند 20 إحالة.",
+      setting_ref20: "🎁 أرسل عدد أيام VIP التي يحصل عليها المستخدم عند 15 إحالة.",
       setting_price: "💰 أرسل سعر VIP الشهري بالـ USDT.\n\nمثال: 5"
     };
 
@@ -855,6 +856,7 @@ if (action === "admin_admins") {
       await ctx.answerCallbackQuery({ text: "⛔ هذا القسم للـOwner فقط.", show_alert: true });
       return;
     }
+
 
     await ctx.answerCallbackQuery();
     await ctx.reply("🛡 إدارة المشرفين\n\n" + "سيتم هنا إضافة وحذف المشرفين.");
@@ -1031,7 +1033,7 @@ if (action === "admin_admins") {
           `💰 السعر: ${settings.vip_price_usdt} USDT / 30 يوم\n` +
           `📣 حد المجموعات: ${settings.vip_group_limit}\n\n` +
           `🎁 7 إحالات → VIP ${settings.referral_7_vip_days} أيام\n` +
-          `🎁 20 إحالة → VIP ${settings.referral_20_vip_days} أيام`
+          `🎁 15 إحالة → VIP ${settings.referral_20_vip_days} أيام`
       );
 
       break;
@@ -1051,7 +1053,7 @@ if (action === "admin_admins") {
           `👤 الإحالات المؤكدة: ${stats.count}\n\n` +
           "🎁 المكافآت:\n" +
           `• 7 إحالات → VIP ${settings.referral_7_vip_days} أيام\n` +
-          `• 20 إحالة → VIP ${settings.referral_20_vip_days} أيام\n\n` +
+          `• 15 إحالة → VIP ${settings.referral_20_vip_days} أيام\n\n` +
           "🔗 رابط دعوتك:\n" +
           referralLink,
         {

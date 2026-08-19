@@ -144,7 +144,7 @@ async function sendAdminSettings(
 
     "🎁 الإحالات\n" +
     `7 إحالات → ${settings.referral_7_vip_days} أيام VIP\n` +
-    `20 إحالة → ${settings.referral_20_vip_days} أيام VIP\n\n` +
+    `15 إحالة → ${settings.referral_20_vip_days} أيام VIP\n\n` +
 
     `💰 سعر VIP: ${settings.vip_price_usdt} USDT`,
     {
@@ -231,6 +231,7 @@ export async function handleAdminExtraCallback(
       "➕ منح VIP\n\n" +
       "أرسل Telegram ID وعدد الأيام.\n\n" +
       "مثال:\n" +
+
       "123456789 30"
     );
 
@@ -663,7 +664,7 @@ export async function handleAdminExtraCallback(
         action:
           "set_referral_20",
         text:
-          "🎁 أرسل عدد أيام VIP لمكافأة 20 إحالة."
+          "🎁 أرسل عدد أيام VIP لمكافأة 15 إحالة."
       },
 
       set_price: {
@@ -885,6 +886,7 @@ export async function handleAdminExtraText(
 
       await clearAdminAction(
         ctx.from.id
+
       );
 
       await ctx.reply(
