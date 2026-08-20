@@ -39,6 +39,7 @@ import {
   postHistory
 } from "./postFlow.js";
 import { handleAccountGroupCallback } from "./accountGroupCallbacks.js";
+import { showGroups } from "./accountGroups.js";
 import {
   startUserActionExclusive,
   startAdminActionExclusive,
@@ -344,6 +345,7 @@ export async function handleCallbacks(ctx: BotContext) {
     const vip =
       user.plan === "vip" && !!user.vip_expires_at && new Date(user.vip_expires_at) > new Date();
 
+
     const dailyLimit = vip ? settings.vip_daily_runs : settings.free_daily_runs;
     const cycleLimit = vip ? settings.vip_cycle_limit : settings.free_cycle_limit;
 
@@ -578,6 +580,7 @@ if (action?.startsWith("publish_saved:")) {
     await showManualGroups(ctx, action.slice(3));
     return;
   }
+
 
   /*
    * chat_cancel: زر "❌ إلغاء" يطلع من adminText.ts بعد ما يبعث
@@ -991,9 +994,30 @@ if (action === "admin_admins") {
     }
 
 
-    case "groups":
-      await ctx.reply("📣 مجموعاتي\n\n" + "بعد ربط حسابك ستظهر المجموعات هنا.");
+    case "groups": {
+      const user = await getUserByTelegramId(ctx.from.id);
+      if (!user) break;
+
+      const accounts = await getUserTelegramAccounts(user.id);
+
+      if (!accounts.length) {
+        await ctx.reply(
+          "📣 مجموعاتي\n\n" +
+            "لا يوجد حساب Telegram مرتبط.\n\n" +
+            "أضف حسابك أولاً.",
+          {
+            reply_markup: new InlineKeyboard()
+              .text("➕ إضافة حساب", "account_add")
+              .row()
+              .text("🏠 الرئيسية", "dashboard")
+          }
+        );
+        break;
+      }
+
+      await showGroups(ctx, accounts[0].id);
       break;
+    }
 
     case "vip": {
       const settings = await getAppSettings();
@@ -1041,6 +1065,7 @@ if (action === "admin_admins") {
           `👤 المستخدم: ${ctx.from.username ? `@${ctx.from.username}` : "غير محدد"}`
       );
       break;
+
 
     default:
       /*

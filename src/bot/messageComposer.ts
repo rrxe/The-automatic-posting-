@@ -598,7 +598,7 @@ export async function showSavedMessages(
             .row()
             .text(
               "↩️ رجوع",
-              "my_messages"
+              "create_message"
             )
             .row()
             .text(
@@ -711,6 +711,7 @@ export async function confirmDeleteSavedMessage(
       "هل تريد حذف هذا المنشور؟\n\n" +
       preview +
       (
+
         String(message.content).length > 180
           ? "…"
           : ""
