@@ -33,6 +33,10 @@ export async function startMessageComposer(ctx) {
         });
         return;
     }
+    if (accounts.length === 1) {
+        await startNewMessage(ctx, accounts[0].id);
+        return;
+    }
     const keyboard = new InlineKeyboard();
     for (const account of accounts) {
         const name = account.username
@@ -202,6 +206,10 @@ export async function startPublishFlow(ctx) {
         });
         return;
     }
+    if (accounts.length === 1) {
+        await showSavedMessages(ctx, accounts[0].id);
+        return;
+    }
     const keyboard = new InlineKeyboard();
     for (const account of accounts) {
         const name = account.username
@@ -278,12 +286,63 @@ export async function showSavedMessages(ctx, accountId) {
         reply_markup: keyboard
     });
 }
+export async function confirmDeleteSavedMessage(ctx, messageId) {
+    if (!ctx.from)
+        return;
+    const user = await getUserByTelegramId(ctx.from.id);
+    if (!user)
+        return;
+    const { data: message, error } = await supabase
+        .from("messages")
+        .select("id,content,telegram_account_id")
+        .eq("id", messageId)
+        .eq("user_id", user.id)
+        .neq("status", "deleted")
+        .maybeSingle();
+    if (error || !message) {
+        await ctx.answerCallbackQuery({
+            text: "❌ المنشور غير موجود.",
+            show_alert: true
+        });
+        return;
+    }
+    await ctx.answerCallbackQuery();
+    const preview = String(message.content)
+        .replace(/\n/g, " ")
+        .slice(0, 180);
+    await ctx.reply("🗑 حذف المنشور\n\n" +
+        "هل تريد حذف هذا المنشور؟\n\n" +
+        preview +
+        (String(message.content).length > 180
+            ? "…"
+            : ""), {
+        reply_markup: new InlineKeyboard()
+            .text("✅ نعم، احذف", `mdel:${message.id}`)
+            .text("❌ إلغاء", `mm:${message.telegram_account_id}`)
+            .row()
+            .text("🏠 الرئيسية", "dashboard")
+    });
+}
 export async function deleteSavedMessage(ctx, messageId) {
     if (!ctx.from)
         return;
     const user = await getUserByTelegramId(ctx.from.id);
     if (!user)
         return;
+    const { data: existingMessage, error: lookupError } = await supabase
+        .from("messages")
+        .select("id,telegram_account_id")
+        .eq("id", messageId)
+        .eq("user_id", user.id)
+        .neq("status", "deleted")
+        .maybeSingle();
+    if (lookupError || !existingMessage) {
+        await ctx.answerCallbackQuery({
+            text: "❌ المنشور غير موجود أو محذوف بالفعل.",
+            show_alert: true
+        });
+        return;
+    }
     /*
      * Soft delete:
      * لا نحذف السجل فعليًا من قاعدة البيانات.
@@ -316,18 +375,8 @@ export async function deleteSavedMessage(ctx, messageId) {
     await ctx.answerCallbackQuery({
         text: "✅ تم حذف المنشور."
     });
-    /*
-     * العودة مباشرة لقائمة المنشورات
-     * للحساب المرتبط بالمنشور.
-     */
-    const { data: deletedMessage } = await supabase
-        .from("messages")
-        .select("telegram_account_id")
-        .eq("id", messageId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-    if (deletedMessage?.telegram_account_id) {
-        await showSavedMessages(ctx, deletedMessage.telegram_account_id);
+    if (existingMessage.telegram_account_id) {
+        await showMyMessages(ctx, existingMessage.telegram_account_id);
         return;
     }
     await ctx.reply("✅ تم حذف المنشور.", {
@@ -458,6 +507,7 @@ export async function showMyMessages(ctx, accountId) {
             .slice(0, 40);
         keyboard
             .text(`📝 ${index + 1}. ${preview}`, `mview:${message.id}`)
+            .text("🗑", `mconfirm:${message.id}`)
             .row();
     }
     keyboard
@@ -465,7 +515,8 @@ export async function showMyMessages(ctx, accountId) {
         .row()
         .text("↩️ الرئيسية", "dashboard");
     await ctx.reply("📝 منشوراتي\n\n" +
-        "اختر المنشور الذي تريد إدارته:", {
+        `📚 المحفوظة: ${data.length}\n` +
+        "اضغط على المنشور لفتحه، أو 🗑 لحذفه:", {
         reply_markup: keyboard
     });
 }
@@ -520,6 +571,10 @@ export async function startMyMessages(ctx) {
                 .row()
                 .text("🏠 الرئيسية", "dashboard")
         });
+        return;
+    }
+    if (accounts.length === 1) {
+        await showMyMessages(ctx, accounts[0].id);
         return;
     }
     const keyboard = new InlineKeyboard();

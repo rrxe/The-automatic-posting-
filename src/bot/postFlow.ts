@@ -107,6 +107,17 @@ export async function startCreatePost(
   }
 
   if (
+    accounts.length === 1 &&
+    !preferredAccountId
+  ) {
+    await choosePostAccount(
+      ctx,
+      accounts[0].id
+    );
+    return;
+  }
+
+  if (
     preferredAccountId
   ) {
     const exists =

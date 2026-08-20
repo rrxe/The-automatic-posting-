@@ -77,6 +77,11 @@ export async function startMessageComposer(
     return;
   }
 
+  if (accounts.length === 1) {
+    await startNewMessage(ctx, accounts[0].id);
+    return;
+  }
+
   const keyboard =
     new InlineKeyboard();
 
@@ -446,6 +451,11 @@ export async function startPublishFlow(
     return;
   }
 
+  if (accounts.length === 1) {
+    await showSavedMessages(ctx, accounts[0].id);
+    return;
+  }
+
   const keyboard =
     new InlineKeyboard();
 
@@ -613,6 +623,85 @@ export async function showSavedMessages(
   );
 }
 
+export async function confirmDeleteSavedMessage(
+  ctx: BotContext,
+  messageId: string
+) {
+  if (!ctx.from) return;
+
+  const user =
+    await getUserByTelegramId(
+      ctx.from.id
+    );
+
+  if (!user) return;
+
+  const {
+    data: message,
+    error
+  } = await supabase
+    .from("messages")
+    .select(
+      "id,content,telegram_account_id"
+    )
+    .eq(
+      "id",
+      messageId
+    )
+    .eq(
+      "user_id",
+      user.id
+    )
+    .neq(
+      "status",
+      "deleted"
+    )
+    .maybeSingle();
+
+  if (error || !message) {
+    await ctx.answerCallbackQuery({
+      text: "❌ المنشور غير موجود.",
+      show_alert: true
+    });
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+
+  const preview =
+    String(message.content)
+      .replace(/\n/g, " ")
+      .slice(0, 180);
+
+  await ctx.reply(
+    "🗑 حذف المنشور\n\n" +
+      "هل تريد حذف هذا المنشور؟\n\n" +
+      preview +
+      (
+        String(message.content).length > 180
+          ? "…"
+          : ""
+      ),
+    {
+      reply_markup:
+        new InlineKeyboard()
+          .text(
+            "✅ نعم، احذف",
+            `mdel:${message.id}`
+          )
+          .text(
+            "❌ إلغاء",
+            `mm:${message.telegram_account_id}`
+          )
+          .row()
+          .text(
+            "🏠 الرئيسية",
+            "dashboard"
+          )
+    }
+  );
+}
+
 export async function deleteSavedMessage(
   ctx: BotContext,
   messageId: string
@@ -625,6 +714,25 @@ export async function deleteSavedMessage(
     );
 
   if (!user) return;
+
+  const {
+    data: existingMessage,
+    error: lookupError
+  } = await supabase
+    .from("messages")
+    .select("id,telegram_account_id")
+    .eq("id", messageId)
+    .eq("user_id", user.id)
+    .neq("status", "deleted")
+    .maybeSingle();
+
+  if (lookupError || !existingMessage) {
+    await ctx.answerCallbackQuery({
+      text: "❌ المنشور غير موجود أو محذوف بالفعل.",
+      show_alert: true
+    });
+    return;
+  }
 
   /*
    * Soft delete:
@@ -680,33 +788,10 @@ export async function deleteSavedMessage(
       "✅ تم حذف المنشور."
   });
 
-  /*
-   * العودة مباشرة لقائمة المنشورات
-   * للحساب المرتبط بالمنشور.
-   */
-  const {
-    data: deletedMessage
-  } = await supabase
-    .from("messages")
-    .select(
-      "telegram_account_id"
-    )
-    .eq(
-      "id",
-      messageId
-    )
-    .eq(
-      "user_id",
-      user.id
-    )
-    .maybeSingle();
-
-  if (
-    deletedMessage?.telegram_account_id
-  ) {
-    await showSavedMessages(
+  if (existingMessage.telegram_account_id) {
+    await showMyMessages(
       ctx,
-      deletedMessage.telegram_account_id
+      existingMessage.telegram_account_id
     );
     return;
   }
@@ -994,6 +1079,10 @@ export async function showMyMessages(
         `📝 ${index + 1}. ${preview}`,
         `mview:${message.id}`
       )
+      .text(
+        "🗑",
+        `mconfirm:${message.id}`
+      )
       .row();
   }
 
@@ -1010,7 +1099,8 @@ export async function showMyMessages(
 
   await ctx.reply(
     "📝 منشوراتي\n\n" +
-    "اختر المنشور الذي تريد إدارته:",
+    `📚 المحفوظة: ${data.length}\n` +
+    "اضغط على المنشور لفتحه، أو 🗑 لحذفه:",
     {
       reply_markup:
         keyboard
@@ -1132,6 +1222,11 @@ export async function startMyMessages(
       }
     );
 
+    return;
+  }
+
+  if (accounts.length === 1) {
+    await showMyMessages(ctx, accounts[0].id);
     return;
   }
 

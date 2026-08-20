@@ -63,6 +63,14 @@ export async function accountPanel(
     return;
   }
 
+  if (accounts.length === 1) {
+    await accountView(
+      ctx,
+      accounts[0].id
+    );
+    return;
+  }
+
   const keyboard =
     new InlineKeyboard();
 
@@ -85,11 +93,6 @@ export async function accountPanel(
   }
 
   keyboard
-    .text(
-      "➕ إضافة حساب",
-      "account_add"
-    )
-    .row()
     .text(
       "🏠 الرئيسية",
       "dashboard"
@@ -190,7 +193,7 @@ export async function accountView(
       : settings.free_cycle_delay_minutes;
 
   await ctx.reply(
-    "📱 حساب Telegram\n\n" +
+    "⚙️ حسابي\n\n" +
     `👤 الحساب: ${
       account.username
         ? `@${account.username}`
@@ -250,10 +253,6 @@ export async function accountView(
             `ar:${account.id}`
           )
           .row()
-          .text(
-            "↩️ حساباتي",
-            "account"
-          )
           .text(
             "🏠 الرئيسية",
             "dashboard"

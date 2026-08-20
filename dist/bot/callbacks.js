@@ -3,7 +3,7 @@ import { bot } from "./index.js";
 import { sendDashboard, sendSecurityInfo } from "./dashboard.js";
 import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
-import { startMessageComposer, chooseMessageAccount, startNewMessage, startMyMessages, showSavedMessages, chooseSavedMessage, deleteSavedMessage, showMyMessages, viewMyMessage } from "./messageComposer.js";
+import { startMessageComposer, startPublishFlow, chooseMessageAccount, startNewMessage, startMyMessages, showSavedMessages, chooseSavedMessage, deleteSavedMessage, confirmDeleteSavedMessage, showMyMessages, viewMyMessage } from "./messageComposer.js";
 import { showPublicVip } from "./vipPublic.js";
 import { showManualGroups, toggleManualGroup, detachManualGroup } from "./manualGroups.js";
 import { getUserTelegramAccounts } from "../telegram/clientManager.js";
@@ -134,34 +134,7 @@ export async function handleCallbacks(ctx) {
         return;
     }
     if (action === "run_publish") {
-        if (ctx.from) {
-            const { getUserTelegramAccounts } = await import("../telegram/clientManager.js");
-            const { getUserByTelegramId } = await import("../services/users.js");
-            const user = await getUserByTelegramId(ctx.from.id);
-            if (user) {
-                const accounts = await getUserTelegramAccounts(user.id);
-                if (!accounts.length) {
-                    await ctx.answerCallbackQuery({
-                        text: "❌ أضف حساب Telegram أولاً.",
-                        show_alert: true
-                    });
-                    return;
-                }
-                const { InlineKeyboard } = await import("grammy");
-                const keyboard = new InlineKeyboard();
-                for (const account of accounts) {
-                    keyboard
-                        .text(`📱 ${account.username ? `@${account.username}` : account.display_name || "الحساب"}`, `rp:${account.id}`)
-                        .row();
-                }
-                keyboard.text("🏠 الرئيسية", "dashboard");
-                await ctx.answerCallbackQuery();
-                await ctx.reply("▶️ تشغيل النشر\n\n" + "اختر الحساب:", {
-                    reply_markup: keyboard
-                });
-                return;
-            }
-        }
+        await startPublishFlow(ctx);
         return;
     }
     if (action?.startsWith("mc:")) {
@@ -209,6 +182,10 @@ export async function handleCallbacks(ctx) {
     }
     if (action?.startsWith("mdel:")) {
         await deleteSavedMessage(ctx, action.slice(5));
+        return;
+    }
+    if (action?.startsWith("mconfirm:")) {
+        await confirmDeleteSavedMessage(ctx, action.slice(9));
         return;
     }
     if (action?.startsWith("pstart:")) {

@@ -76,11 +76,6 @@ export async function sendDashboard(
       user.vip_expires_at
     ) > new Date();
 
-  const accountLimit =
-    vip
-      ? settings.vip_account_limit
-      : settings.free_account_limit;
-
   const groupLimit =
     vip
       ? settings.vip_group_limit
@@ -146,53 +141,34 @@ export async function sendDashboard(
   } else {
     keyboard
       .text(
-        "▶️ تشغيل",
+        "▶️ تشغيل النشر",
         "run_publish"
       )
       .row();
   }
 
-  keyboard
+  // لا نظهر زر إضافة الحساب طالما يوجد حساب مرتبط.
+  if (!accounts.length) {
+    keyboard
       .text(
-        "➕ إضافة حساب",
+        "➕ إضافة حساب Telegram",
         "account_add"
       )
-      .row()
-      .text(
-        "✍️ إنشاء منشور",
-        "create_message"
-      )
-      .text(
-        "📝 منشوراتي",
-        "my_messages"
-      )
-      .row()
-      .text(
-        "📣 مجموعاتي",
-        "groups"
-      )
-      .text(
-        "⭐ VIP",
-        "vip"
-      )
-      .row()
-      .text(
-        "👥 الإحالات",
-        "referrals"
-      )
-      .text(
-        "📊 سجل النشر",
-        "publish_history"
-      )
-      .row()
-      .text(
-        "⚙️ حسابي",
-        "account"
-      )
-      .text(
-        "🔐 الأمان والخصوصية",
-        "security_info"
-      );
+      .row();
+  }
+
+  keyboard
+    .text("✍️ إنشاء منشور", "create_message")
+    .text("📝 منشوراتي", "my_messages")
+    .row()
+    .text("📣 مجموعاتي", "groups")
+    .text("⚙️ حسابي", "account")
+    .row()
+    .text("⭐ VIP", "vip")
+    .text("👥 الإحالات", "referrals")
+    .row()
+    .text("📊 سجل النشر", "publish_history")
+    .text("🔐 الأمان", "security_info");
 
   if (
     await isAdmin(
@@ -209,37 +185,30 @@ export async function sendDashboard(
 
   await ctx.reply(
     "🚀 نشر تلقائي\n\n" +
-    "أداة سهلة لإدارة ونشر منشوراتك\n" +
-    "في مجموعاتك المحددة.\n\n" +
+    "إدارة ونشر منشوراتك بسهولة من مكان واحد.\n\n" +
     "──────────\n\n" +
-    `📦 باقتك: ${
-      vip
-        ? "⭐ VIP"
-        : "🆓 مجاني"
-    }\n\n` +
-    "📊 الاستخدام\n" +
-    `👤 الحسابات: ${
+    `📦 الباقة: ${vip ? "⭐ VIP" : "🆓 مجاني"}\n` +
+    (
       accounts.length
-    } من ${
-      accountLimit
-    }\n` +
-    `▶️ التشغيلات اليوم: ${
-      displayedUsed
-    } من ${
-      dailyLimit
-    } (متبقي ${
-      dailyRemaining
-    })\n` +
-    `🔄 الدورات لكل تشغيل: ${
-      cycleLimit
-    } — انتظار ${
-      cycleDelay
-    } دقيقة بينها\n` +
-    `📣 حد المجموعات: ${
-      groupLimit
-    }\n\n` +
+        ? `📱 الحساب: ${
+            accounts[0].username
+              ? `@${accounts[0].username}`
+              : accounts[0].display_name ||
+                accounts[0].phone_hint ||
+                "مرتبط"
+          }\n`
+        : "📱 الحساب: غير مرتبط\n"
+    ) +
+    `📣 حد المجموعات: ${groupLimit}\n\n` +
+    "📊 الاستخدام\n" +
+    `▶️ التشغيلات اليوم: ${displayedUsed} من ${dailyLimit} (متبقي ${dailyRemaining})\n` +
+    `🔄 الدورات لكل تشغيل: ${cycleLimit} — انتظار ${cycleDelay} دقيقة بينها\n\n` +
     "──────────\n\n" +
-    "👇 اختر من القائمة:",
+    (
+      accounts.length
+        ? "✅ حسابك جاهز. اختر الخدمة:"
+        : "⚠️ أضف حساب Telegram أولاً:"
+    ),
     {
       reply_markup:
         keyboard

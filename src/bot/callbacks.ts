@@ -6,12 +6,14 @@ import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
 import {
   startMessageComposer,
+  startPublishFlow,
   chooseMessageAccount,
   startNewMessage,
   startMyMessages,
   showSavedMessages,
   chooseSavedMessage,
   deleteSavedMessage,
+  confirmDeleteSavedMessage,
   showMyMessages,
   viewMyMessage
 } from "./messageComposer.js";
@@ -203,47 +205,7 @@ export async function handleCallbacks(ctx: BotContext) {
 
 
   if (action === "run_publish") {
-    if (ctx.from) {
-      const { getUserTelegramAccounts } = await import("../telegram/clientManager.js");
-      const { getUserByTelegramId } = await import("../services/users.js");
-
-      const user = await getUserByTelegramId(ctx.from.id);
-
-      if (user) {
-        const accounts = await getUserTelegramAccounts(user.id);
-
-        if (!accounts.length) {
-          await ctx.answerCallbackQuery({
-            text: "❌ أضف حساب Telegram أولاً.",
-            show_alert: true
-          });
-          return;
-        }
-
-        const { InlineKeyboard } = await import("grammy");
-        const keyboard = new InlineKeyboard();
-
-        for (const account of accounts) {
-          keyboard
-            .text(
-              `📱 ${account.username ? `@${account.username}` : account.display_name || "الحساب"}`,
-              `rp:${account.id}`
-            )
-            .row();
-        }
-
-        keyboard.text("🏠 الرئيسية", "dashboard");
-
-        await ctx.answerCallbackQuery();
-
-        await ctx.reply("▶️ تشغيل النشر\n\n" + "اختر الحساب:", {
-          reply_markup: keyboard
-        });
-
-        return;
-      }
-    }
-
+    await startPublishFlow(ctx);
     return;
   }
 
@@ -303,6 +265,14 @@ export async function handleCallbacks(ctx: BotContext) {
 
   if (action?.startsWith("mdel:")) {
     await deleteSavedMessage(ctx, action.slice(5));
+    return;
+  }
+
+  if (action?.startsWith("mconfirm:")) {
+    await confirmDeleteSavedMessage(
+      ctx,
+      action.slice(9)
+    );
     return;
   }
 

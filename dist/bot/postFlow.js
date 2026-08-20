@@ -34,6 +34,11 @@ export async function startCreatePost(ctx, preferredAccountId) {
         });
         return;
     }
+    if (accounts.length === 1 &&
+        !preferredAccountId) {
+        await choosePostAccount(ctx, accounts[0].id);
+        return;
+    }
     if (preferredAccountId) {
         const exists = accounts.some((a) => a.id ===
             preferredAccountId);

@@ -22,6 +22,10 @@ export async function accountPanel(ctx) {
         });
         return;
     }
+    if (accounts.length === 1) {
+        await accountView(ctx, accounts[0].id);
+        return;
+    }
     const keyboard = new InlineKeyboard();
     for (const account of accounts) {
         const name = account.username
@@ -34,8 +38,6 @@ export async function accountPanel(ctx) {
             .row();
     }
     keyboard
-        .text("➕ إضافة حساب", "account_add")
-        .row()
         .text("🏠 الرئيسية", "dashboard");
     await ctx.reply("⚙️ حساباتي\n\n" +
         `📱 الحسابات المرتبطة: ${accounts.length}\n\n` +
@@ -80,7 +82,7 @@ export async function accountView(ctx, accountId) {
     const cycleDelay = vip
         ? settings.vip_cycle_delay_minutes
         : settings.free_cycle_delay_minutes;
-    await ctx.reply("📱 حساب Telegram\n\n" +
+    await ctx.reply("⚙️ حسابي\n\n" +
         `👤 الحساب: ${account.username
             ? `@${account.username}`
             : account.display_name ||
@@ -104,7 +106,6 @@ export async function accountView(ctx, accountId) {
             .row()
             .text("🗑 إزالة الحساب", `ar:${account.id}`)
             .row()
-            .text("↩️ حساباتي", "account")
             .text("🏠 الرئيسية", "dashboard")
     });
 }
