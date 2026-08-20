@@ -948,7 +948,7 @@ if (action === "admin_admins") {
   }
 
   if (action === "my_messages") {
-    await startMyMessages(ctx);
+    await startMessageComposer(ctx);
     return;
   }
 

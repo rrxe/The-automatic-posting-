@@ -80,10 +80,7 @@ export async function startMessageComposer(
     return;
   }
 
-  /*
-   * حساب واحد:
-   * ندخل مباشرة إلى مركز المنشورات.
-   */
+  // حساب واحد = لا نسأل المستخدم عن الحساب.
   if (accounts.length === 1) {
     const accountId =
       accounts[0].id;
@@ -117,10 +114,7 @@ export async function startMessageComposer(
     return;
   }
 
-  /*
-   * في حال وجود أكثر من حساب:
-   * نبقي اختيار الحساب كما هو.
-   */
+  // إذا كان هناك أكثر من حساب نبقي اختيار الحساب.
   const keyboard =
     new InlineKeyboard();
 
@@ -1062,7 +1056,7 @@ export async function showMyMessages(
 
   if (error) {
     console.error(
-      "MY MESSAGES ERROR:",
+      "SHOW MY MESSAGES ERROR:",
       error.message
     );
 
@@ -1084,7 +1078,7 @@ export async function showMyMessages(
   if (!data?.length) {
     await ctx.reply(
       "🗂 إدارة المنشورات\n\n" +
-      "لا توجد منشورات محفوظة حتى الآن.",
+      "لا توجد منشورات محفوظة لهذا الحساب.",
       {
         reply_markup:
           new InlineKeyboard()
@@ -1112,9 +1106,9 @@ export async function showMyMessages(
     new InlineKeyboard();
 
   /*
-   * مهم:
-   * لا نضع محتوى المنشور داخل نص زر Telegram.
-   * نستخدم أرقام ثابتة فقط حتى لا يظهر خطأ UTF-8.
+   * مهم جداً:
+   * لا نستخدم محتوى المنشور داخل زر Telegram.
+   * نستخدم اسم ثابت فقط لتجنب مشكلة UTF-8.
    */
 
   for (
@@ -1127,7 +1121,7 @@ export async function showMyMessages(
         `mview:${message.id}`
       )
       .text(
-        "حذف",
+        "🗑 حذف",
         `mdel:${message.id}`
       )
       .row();
@@ -1140,11 +1134,6 @@ export async function showMyMessages(
     )
     .row()
     .text(
-      "↩️ رجوع",
-      "create_message"
-    )
-    .row()
-    .text(
       "🏠 الرئيسية",
       "dashboard"
     );
@@ -1152,7 +1141,7 @@ export async function showMyMessages(
   await ctx.reply(
     "🗂 إدارة المنشورات\n\n" +
     `📚 عدد المنشورات: ${data.length}\n\n` +
-    "اضغط على رقم المنشور لعرضه، أو «حذف» لإزالته.",
+    "اختر المنشور لعرضه، أو اضغط حذف لإزالته.",
     {
       reply_markup:
         keyboard
@@ -1227,7 +1216,7 @@ export async function viewMyMessage(
           )
           .row()
           .text(
-            "↩️ منشوراتي",
+            "↩️ إدارة المنشورات",
             `mm:${message.telegram_account_id}`
           )
           .text(
