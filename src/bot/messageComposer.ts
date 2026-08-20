@@ -1191,6 +1191,8 @@ export async function startMyMessages(
 ) {
   if (!ctx.from) return;
 
+  await ctx.answerCallbackQuery().catch(() => {});
+
   const user =
     await getUserByTelegramId(
       ctx.from.id

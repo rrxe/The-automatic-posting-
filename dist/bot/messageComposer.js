@@ -559,6 +559,7 @@ export async function viewMyMessage(ctx, messageId) {
 export async function startMyMessages(ctx) {
     if (!ctx.from)
         return;
+    await ctx.answerCallbackQuery().catch(() => { });
     const user = await getUserByTelegramId(ctx.from.id);
     if (!user)
         return;
