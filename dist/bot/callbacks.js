@@ -3,7 +3,7 @@ import { bot } from "./index.js";
 import { sendDashboard, sendSecurityInfo } from "./dashboard.js";
 import { deleteCurrentScreen } from "./ui.js";
 import { handleAdminExtraCallback } from "./adminExtras.js";
-import { startMessageComposer, startPublishFlow, chooseMessageAccount, startNewMessage, startMyMessages, showSavedMessages, chooseSavedMessage, deleteSavedMessage, confirmDeleteSavedMessage, showMyMessages, viewMyMessage } from "./messageComposer.js";
+import { startMessageComposer, startPublishFlow, chooseMessageAccount, startNewMessage, showSavedMessages, chooseSavedMessage, deleteSavedMessage, confirmDeleteSavedMessage, showMyMessages, viewMyMessage } from "./messageComposer.js";
 import { showPublicVip } from "./vipPublic.js";
 import { showManualGroups, toggleManualGroup, detachManualGroup } from "./manualGroups.js";
 import { getUserTelegramAccounts } from "../telegram/clientManager.js";
@@ -12,6 +12,7 @@ import { getAppSettings } from "../services/settings.js";
 import { stopPublishRun } from "../services/publishControl.js";
 import { choosePostAccount, showPostPreview, showPostGroups, togglePostGroup, confirmPostGroups, publishPost, cancelPost, postHistory } from "./postFlow.js";
 import { handleAccountGroupCallback } from "./accountGroupCallbacks.js";
+import { showGroups } from "./accountGroups.js";
 import { startUserActionExclusive } from "../services/actionManager.js";
 import { checkAllRequiredChannels } from "../services/membership.js";
 import { getReferralStats } from "../services/referrals.js";
@@ -724,7 +725,7 @@ export async function handleCallbacks(ctx) {
         return;
     }
     if (action === "my_messages") {
-        await startMyMessages(ctx);
+        await startMessageComposer(ctx);
         return;
     }
     switch (action) {
@@ -752,9 +753,25 @@ export async function handleCallbacks(ctx) {
                 "مثال:\n964******");
             break;
         }
-        case "groups":
-            await ctx.reply("📣 مجموعاتي\n\n" + "بعد ربط حسابك ستظهر المجموعات هنا.");
+        case "groups": {
+            const user = await getUserByTelegramId(ctx.from.id);
+            if (!user)
+                break;
+            const accounts = await getUserTelegramAccounts(user.id);
+            if (!accounts.length) {
+                await ctx.reply("📣 مجموعاتي\n\n" +
+                    "لا يوجد حساب Telegram مرتبط.\n\n" +
+                    "أضف حسابك أولاً.", {
+                    reply_markup: new InlineKeyboard()
+                        .text("➕ إضافة حساب", "account_add")
+                        .row()
+                        .text("🏠 الرئيسية", "dashboard")
+                });
+                break;
+            }
+            await showGroups(ctx, accounts[0].id);
             break;
+        }
         case "vip": {
             const settings = await getAppSettings();
             await ctx.reply("⭐ باقة VIP\n\n" +

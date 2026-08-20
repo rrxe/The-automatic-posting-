@@ -76,8 +76,7 @@ export async function sendDashboard(ctx) {
             .row();
     }
     keyboard
-        .text("✍️ إنشاء منشور", "create_message")
-        .text("📝 منشوراتي", "my_messages")
+        .text("✍️ المنشورات", "create_message")
         .row()
         .text("📣 مجموعاتي", "groups")
         .text("⚙️ حسابي", "account")
