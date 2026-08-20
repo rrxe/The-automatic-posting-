@@ -55,6 +55,9 @@ export async function startMessageComposer(
     );
 
   if (!accounts.length) {
+    await ctx.answerCallbackQuery()
+      .catch(() => {});
+
     await ctx.reply(
       "✍️ المنشورات\n\n" +
       "لا يوجد حساب Telegram مرتبط.\n\n" +
@@ -77,11 +80,47 @@ export async function startMessageComposer(
     return;
   }
 
+  /*
+   * حساب واحد:
+   * ندخل مباشرة إلى مركز المنشورات.
+   */
   if (accounts.length === 1) {
-    await startNewMessage(ctx, accounts[0].id);
+    const accountId =
+      accounts[0].id;
+
+    await ctx.answerCallbackQuery()
+      .catch(() => {});
+
+    await ctx.reply(
+      "✍️ المنشورات\n\n" +
+      "اختر الخدمة التي تريدها:",
+      {
+        reply_markup:
+          new InlineKeyboard()
+            .text(
+              "➕ إضافة منشور",
+              `mnew:${accountId}`
+            )
+            .row()
+            .text(
+              "🗂 إدارة المنشورات",
+              `mm:${accountId}`
+            )
+            .row()
+            .text(
+              "🏠 الرئيسية",
+              "dashboard"
+            )
+      }
+    );
+
     return;
   }
 
+  /*
+   * في حال وجود أكثر من حساب:
+   * نبقي اختيار الحساب كما هو.
+   */
   const keyboard =
     new InlineKeyboard();
 
@@ -112,8 +151,8 @@ export async function startMessageComposer(
     .catch(() => {});
 
   await ctx.reply(
-    "✍️ إنشاء منشور\n\n" +
-    "اختر الحساب الذي سيُحفظ المنشور له:",
+    "✍️ المنشورات\n\n" +
+    "اختر الحساب:",
     {
       reply_markup:
         keyboard
@@ -165,20 +204,20 @@ export async function chooseMessageAccount(
         "الحساب";
 
   await ctx.reply(
-    "📱 حساب Telegram\n\n" +
-    `👤 ${name}\n\n` +
-    "اختر ما تريد:",
+    "✍️ المنشورات\n\n" +
+    `📱 الحساب: ${name}\n\n` +
+    "اختر الخدمة التي تريدها:",
     {
       reply_markup:
         new InlineKeyboard()
           .text(
-            "📝 منشوراتي",
-            `rp:${accountId}`
+            "➕ إضافة منشور",
+            `mnew:${accountId}`
           )
           .row()
           .text(
-            "✍️ إنشاء منشور جديد",
-            `mnew:${accountId}`
+            "🗂 إدارة المنشورات",
+            `mm:${accountId}`
           )
           .row()
           .text(
@@ -387,13 +426,13 @@ export async function handleMessageText(
       reply_markup:
         new InlineKeyboard()
           .text(
-            "📝 منشوراتي",
-            "run_publish"
+            "➕ إضافة منشور آخر",
+            `mnew:${accountId}`
           )
           .row()
           .text(
-            "✍️ إنشاء منشور جديد",
-            "create_message"
+            "🗂 إدارة المنشورات",
+            `mm:${accountId}`
           )
           .row()
           .text(
@@ -1022,8 +1061,13 @@ export async function showMyMessages(
     .limit(20);
 
   if (error) {
+    console.error(
+      "MY MESSAGES ERROR:",
+      error.message
+    );
+
     await ctx.reply(
-      "❌ تعذر تحميل منشوراتك.",
+      "❌ تعذر تحميل المنشورات.",
       {
         reply_markup:
           new InlineKeyboard()
@@ -1033,24 +1077,25 @@ export async function showMyMessages(
             )
       }
     );
+
     return;
   }
 
   if (!data?.length) {
     await ctx.reply(
-      "📝 منشوراتي\n\n" +
-      "لا توجد منشورات محفوظة لهذا الحساب.",
+      "🗂 إدارة المنشورات\n\n" +
+      "لا توجد منشورات محفوظة حتى الآن.",
       {
         reply_markup:
           new InlineKeyboard()
             .text(
-              "✍️ إنشاء منشور جديد",
+              "➕ إضافة منشور",
               `mnew:${accountId}`
             )
             .row()
             .text(
-              "↩️ الحساب",
-              `mmc:${accountId}`
+              "↩️ رجوع",
+              "create_message"
             )
             .row()
             .text(
@@ -1059,48 +1104,55 @@ export async function showMyMessages(
             )
       }
     );
+
     return;
   }
 
   const keyboard =
     new InlineKeyboard();
 
+  /*
+   * مهم:
+   * لا نضع محتوى المنشور داخل نص زر Telegram.
+   * نستخدم أرقام ثابتة فقط حتى لا يظهر خطأ UTF-8.
+   */
+
   for (
     const [index, message]
     of data.entries()
   ) {
-    const preview =
-      String(message.content)
-        .replace(/\n/g, " ")
-        .slice(0, 40);
-
     keyboard
       .text(
-        `📝 ${index + 1}. ${preview}`,
+        `منشور ${index + 1}`,
         `mview:${message.id}`
       )
       .text(
-        "🗑",
-        `mconfirm:${message.id}`
+        "حذف",
+        `mdel:${message.id}`
       )
       .row();
   }
 
   keyboard
     .text(
-      "✍️ إنشاء منشور جديد",
+      "➕ إضافة منشور",
       `mnew:${accountId}`
     )
     .row()
     .text(
-      "↩️ الرئيسية",
+      "↩️ رجوع",
+      "create_message"
+    )
+    .row()
+    .text(
+      "🏠 الرئيسية",
       "dashboard"
     );
 
   await ctx.reply(
-    "📝 منشوراتي\n\n" +
-    `📚 المحفوظة: ${data.length}\n` +
-    "اضغط على المنشور لفتحه، أو 🗑 لحذفه:",
+    "🗂 إدارة المنشورات\n\n" +
+    `📚 عدد المنشورات: ${data.length}\n\n` +
+    "اضغط على رقم المنشور لعرضه، أو «حذف» لإزالته.",
     {
       reply_markup:
         keyboard
