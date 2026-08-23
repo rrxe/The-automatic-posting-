@@ -3,6 +3,7 @@ import { registerOfficialTelegramAuth } from "./web/officialTelegramAuth.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+
 import { bot } from "./bot/index.js";
 import { env } from "./config/env.js";
 
@@ -19,6 +20,7 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
 registerOfficialTelegramAuth(app);
 
 app.get("/", (_req, res) => {
@@ -36,44 +38,102 @@ app.get("/health", (_req, res) => {
   });
 });
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/*
+ * deleteWebhook:
+ * إذا Telegram API غير متاح مؤقتاً،
+ * لا نخلي العملية تموت.
+ */
+async function deleteWebhookSafely() {
+  try {
+    await bot.api.deleteWebhook({
+      drop_pending_updates: true
+    });
+
+    console.log(
+      "Telegram webhook deleted successfully."
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      "WEBHOOK DELETE FAILED — continuing startup:",
+      error instanceof Error
+        ? error.message
+        : String(error)
+    );
+
+    return false;
+  }
+}
+
+/*
+ * تشغيل Bot API.
+ *
+ * إذا Telegram غير متاح:
+ * نعيد المحاولة كل 5 ثوانٍ.
+ *
+ * لا warmup للحسابات الشخصية هنا.
+ */
+async function startTelegramBot() {
+  let attempt = 0;
+
+  while (true) {
+    attempt += 1;
+
+    try {
+      console.log(
+        `Telegram startup attempt #${attempt}...`
+      );
+
+      /*
+       * فشل deleteWebhook لا يمنعنا من محاولة bot.init().
+       */
+      await deleteWebhookSafely();
+
+      /*
+       * getMe
+       */
+      await bot.init();
+
+      console.log(
+        `Telegram bot started: @${bot.botInfo.username}`
+      );
+
+      /*
+       * بدء long polling.
+       */
+      run(bot);
+
+      console.log(
+        "Telegram update runner started successfully."
+      );
+
+      return;
+    } catch (error) {
+      console.error(
+        `TELEGRAM STARTUP FAILED (attempt #${attempt}) — retrying in 5 seconds:`,
+        error instanceof Error
+          ? error.message
+          : String(error)
+      );
+
+      await sleep(5000);
+    }
+  }
+}
+
 async function main() {
   console.log("Starting Storm...");
 
-  const reconciled =
-    await reconcileStuckPublishRuns();
-
-  if (reconciled > 0) {
-    console.log(
-      `Reconciled ${reconciled} stuck publish run(s) from previous process.`
-    );
-  }
-
-  startIdleClientSweeper();
-
   /*
-   * لا نعيد تشغيل أي حسابات Telegram شخصية
-   * عند إعادة تشغيل السيرفر.
-   *
-   * الحسابات تبقى محفوظة في قاعدة البيانات،
-   * لكن الاتصال بها يبدأ فقط عند الحاجة الفعلية.
+   * HTTP server يبدأ مباشرة.
    */
-
-  await bot.api.deleteWebhook({
-    drop_pending_updates: true
-  });
-
-  /*
-   * نستخدم run() من @grammyjs/runner لمعالجة
-   * تحديثات Telegram بشكل متوازٍ.
-   */
-  await bot.init();
-
-  console.log(
-    `Telegram bot started: @${bot.botInfo.username}`
-  );
-
-  run(bot);
-
   app.listen(
     env.PORT,
     () => {
@@ -82,13 +142,52 @@ async function main() {
       );
     }
   );
+
+  /*
+   * استعادة عمليات النشر العالقة.
+   */
+  try {
+    const reconciled =
+      await reconcileStuckPublishRuns();
+
+    if (reconciled > 0) {
+      console.log(
+        `Reconciled ${reconciled} stuck publish run(s) from previous process.`
+      );
+    }
+  } catch (error) {
+    console.error(
+      "PUBLISH RECONCILIATION ERROR:",
+      error instanceof Error
+        ? error.message
+        : String(error)
+    );
+  }
+
+  /*
+   * لا نعمل warmTelegramAccounts().
+   *
+   * الحسابات الشخصية تبقى محفوظة في DB،
+   * لكن لا يتم إعادة الاتصال بها بعد Restart.
+   */
+  startIdleClientSweeper();
+
+  /*
+   * نبدأ Bot API فقط.
+   */
+  await startTelegramBot();
 }
 
 main().catch((error) => {
+  /*
+   * لا نسقط Node بسبب Telegram.
+   *
+   * startTelegramBot() يعيد المحاولة بنفسه.
+   */
   console.error(
-    "FATAL ERROR:",
-    error
+    "MAIN ERROR:",
+    error instanceof Error
+      ? error.message
+      : String(error)
   );
-
-  process.exit(1);
 });
