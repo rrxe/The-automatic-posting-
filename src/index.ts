@@ -37,50 +37,156 @@ app.get("/health", (_req, res) => {
   });
 });
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function deleteWebhookSafely() {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        console.warn(
+          "WEBHOOK DELETE TIMEOUT — continuing startup."
+        );
+        resolve();
+      }, 8000);
+    });
+
+    const deletePromise = bot.api
+      .deleteWebhook({
+        drop_pending_updates: true
+      })
+      .then(() => {
+        console.log(
+          "Telegram webhook deleted successfully."
+        );
+      })
+      .catch((error) => {
+        console.error(
+          "WEBHOOK DELETE FAILED — continuing without crashing:",
+          error instanceof Error
+            ? error.message
+            : String(error)
+        );
+      });
+
+    await Promise.race([
+      deletePromise,
+      timeoutPromise
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function startTelegramBot() {
+  let attempt = 0;
+
+  while (true) {
+    attempt += 1;
+
+    try {
+      console.log(
+        `Telegram startup attempt #${attempt}...`
+      );
+
+      await deleteWebhookSafely();
+
+      await bot.init();
+
+      console.log(
+        `Telegram bot started: @${bot.botInfo.username}`
+      );
+
+      run(bot);
+
+      console.log(
+        "Telegram update runner started successfully."
+      );
+
+      return;
+    } catch (error) {
+      console.error(
+        `TELEGRAM STARTUP FAILED (attempt #${attempt}) — retrying in 10 seconds:`,
+        error instanceof Error
+          ? error.message
+          : String(error)
+      );
+
+      await sleep(10000);
+    }
+  }
+}
+
 async function main() {
   console.log("Starting Storm...");
 
-  const reconciled =
-    await reconcileStuckPublishRuns();
-
-  if (reconciled > 0) {
+  /*
+   * شغّل HTTP server أولاً.
+   * حتى لو Telegram API غير متاح، الاستضافة تبقى تعتبر التطبيق شغال
+   * ولا يسقط السيرفر بالكامل.
+   */
+  app.listen(env.PORT, () => {
     console.log(
-      `Reconciled ${reconciled} stuck publish run(s) from previous process.`
+      `API running on port ${env.PORT}`
+    );
+  });
+
+  try {
+    const reconciled =
+      await reconcileStuckPublishRuns();
+
+    if (reconciled > 0) {
+      console.log(
+        `Reconciled ${reconciled} stuck publish run(s) from previous process.`
+      );
+    }
+  } catch (error) {
+    console.error(
+      "PUBLISH RECONCILIATION ERROR:",
+      error instanceof Error
+        ? error.message
+        : String(error)
     );
   }
 
   startIdleClientSweeper();
 
   /*
-   * يعيد الاتصال بكل الحسابات النشطة عند تشغيل السيرفر — هذا الاستدعاء
-   * كان ناقصاً (الدالة موجودة أصلاً بالكود لكن غير مستخدمة). فائدته الآن:
-   * أي حساب مربوط مسبقاً يلتقط بصمة الجهاز الجديدة (Linux/Web) فور إعادة
-   * تشغيل السيرفر، بدل ما ينتظر أول عملية نشر تلقائية تعيد الاتصال به.
-   * بالخلفية (بدون await) حتى لا يؤخر جاهزية السيرفر والبوت.
+   * Warmup للحسابات الشخصية يبقى بالخلفية.
+   * الجلسات المنتهية يتم تخطيها من clientManager بدون حذف الحساب.
    */
   void warmTelegramAccounts().catch((error) => {
-    console.error("ACCOUNT WARMUP STARTUP ERROR:", error);
+    console.error(
+      "ACCOUNT WARMUP STARTUP ERROR:",
+      error
+    );
   });
-
-  await bot.api.deleteWebhook({ drop_pending_updates: true });
 
   /*
-   * مهم: نستخدم run() من @grammyjs/runner بدل bot.start() لمعالجة تحديثات
-   * Telegram بالتوازي. كانت bot.start() (وهي المكتبة الأساسية في grammy)
-   * تعالج التحديثات بالتتابع: طلب واحد "عالق" (مثل تسجيل دخول ينتظر بلا
-   * نهاية) كان يمنع البوت بالكامل عن معالجة أي رسالة من أي مستخدم آخر إلى
-   * أن ينتهي. run() يعالج كل محادثة بشكل مستقل ومتوازٍ.
+   * تشغيل Telegram في حلقة مستقلة.
+   * إذا Telegram API كان متاحاً يبدأ فوراً.
+   * إذا كان هناك ETIMEDOUT / network error لا يموت Node،
+   * بل يعيد المحاولة كل 10 ثوانٍ.
    */
-  await bot.init();
-  console.log(`Telegram bot started: @${bot.botInfo.username}`);
-  run(bot);
-
-  app.listen(env.PORT, () => {
-    console.log(`API running on port ${env.PORT}`);
-  });
+  void startTelegramBot();
 }
 
 main().catch((error) => {
-  console.error("FATAL ERROR:", error);
-  process.exit(1);
+  console.error(
+    "FATAL ERROR:",
+    error
+  );
+
+  /*
+   * لا نقتل العملية هنا بسبب خطأ Telegram.
+   * HTTP server يجب أن يبقى شغالاً، وstartTelegramBot
+   * لديه نظام retry خاص به.
+   */
 });
