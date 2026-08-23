@@ -6,17 +6,28 @@ import { handleCallbacks } from "./callbacks.js";
 import { handleAdminText } from "./adminText.js";
 import { handleMessageText } from "./messageComposer.js";
 import { handleBroadcastPhoto } from "./broadcast.js";
-export const bot = new Bot(env.BOT_TOKEN);
 /*
- * نُشغّل البوت عبر run() من @grammyjs/runner (انظر index.ts) بدل bot.start()
- * لمعالجة التحديثات بالتوازي، حتى لا يُجمّد مستخدم واحد عالق البوت بالكامل
- * لبقية المستخدمين. sequentialize هنا تحافظ فقط على ترتيب رسائل *نفس*
- * المستخدم/المحادثة، وتسمح بمعالجة مستخدمين مختلفين في نفس الوقت.
+ * مهلة Telegram Bot API.
+ *
+ * هذا يمنع deleteWebhook / getMe / sendMessage
+ * من البقاء معلقة وقت طويل إذا شبكة Telegram غير متاحة.
+ */
+export const bot = new Bot(env.BOT_TOKEN, {
+    client: {
+        timeoutSeconds: 15
+    }
+});
+/*
+ * نحافظ على ترتيب رسائل نفس المستخدم/المحادثة،
+ * بينما المستخدمون المختلفون يمكن معالجتهم بالتوازي.
  */
 bot.use(sequentialize((ctx) => {
     const chat = ctx.chat?.id.toString();
     const user = ctx.from?.id.toString();
-    return [chat, user].filter((v) => Boolean(v));
+    return [
+        chat,
+        user
+    ].filter((v) => Boolean(v));
 }));
 bot.command("start", async (ctx) => {
     try {
@@ -24,7 +35,10 @@ bot.command("start", async (ctx) => {
     }
     catch (error) {
         console.error("START ERROR:", error);
-        await ctx.reply("❌ حدث خطأ أثناء تشغيل الحساب.");
+        try {
+            await ctx.reply("❌ حدث خطأ أثناء تشغيل الحساب.");
+        }
+        catch { }
     }
 });
 bot.on("callback_query:data", async (ctx) => {
@@ -47,9 +61,6 @@ bot.on("message:text", async (ctx, next) => {
         /*
          * أولاً نعطي نظام إنشاء المنشورات
          * فرصة لمعالجة الرسالة.
-         *
-         * إذا كان المستخدم في وضع كتابة منشور،
-         * سيتم حفظ المنشور ولن نرسله لباقي handlers.
          */
         const handled = await handleMessageText(ctx, ctx.message.text);
         if (handled) {
@@ -68,10 +79,6 @@ bot.on("message:text", async (ctx, next) => {
 });
 bot.on("message:photo", async (ctx) => {
     try {
-        /*
-         * حالياً الاستخدام الوحيد للصور بالبوت هو تركيب رسالة جماعية
-         * (قسم الإدارة). أي صورة تصل خارج هذا السياق تُتجاهل بصمت.
-         */
         await handleBroadcastPhoto(ctx);
     }
     catch (error) {
