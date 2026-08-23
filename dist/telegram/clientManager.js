@@ -149,12 +149,51 @@ export async function warmTelegramAccounts() {
         console.error("ACCOUNT WARMUP ERROR:", error.message);
         return;
     }
-    for (const account of data ?? []) {
+    const accounts = data ?? [];
+    for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
         try {
             await getTelegramClient(account.id);
         }
         catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes("TELEGRAM_SESSION_EXPIRED")) {
+                /*
+                 * نتجاهلها فقط أثناء warmup — ما نلمس قاعدة البيانات هنا.
+                 * الحساب يضل نشطاً كما هو؛ أول محاولة نشر فعلية عليه هي اللي
+                 * تكتشف وتعطّل الجلسة المنتهية (بمسار منفصل بملف publish.ts)
+                 * وتوضح للمستخدم إنه يحتاج يعيد الربط.
+                 */
+                console.log(`Account ${account.id} session expired — skipped during warmup (left untouched).`);
+                continue;
+            }
             console.error(`Failed to connect account ${account.id}:`, error);
+            /*
+             * خطأ شبكة (مهلة اتصال، رفض اتصال...) وليس جلسة منتهية — هذا لا
+             * يعني شيئاً عن هذا الحساب تحديداً، غالباً السيرفر نفسه لا يصل
+             * إلى خوادم Telegram حالياً. لا فائدة من تكرار نفس محاولة الاتصال
+             * لكل حساب متبقي — نوقف هذه الدفعة كاملة ونحاول من جديد بالـ
+             * warmup القادم بدل ما نستهلك دقائق بلا فائدة.
+             */
+            const looksLikeNetworkIssue = message.includes("timed out") ||
+                message.includes("TIMEOUT") ||
+                message.includes("ETIMEDOUT") ||
+                message.includes("ECONNREFUSED") ||
+                message.includes("ENOTFOUND") ||
+                message.includes("ECONNRESET");
+            if (looksLikeNetworkIssue) {
+                console.error("ACCOUNT WARMUP: تعذر الوصول لخوادم Telegram من هذا السيرفر — " +
+                    "إيقاف بقية هذه الدفعة (سيُعاد المحاولة تلقائياً بالتشغيل القادم أو عند أول نشر).");
+                break;
+            }
+        }
+        /*
+         * تباعد بسيط بين كل اتصال والي بعده — يمنع دفعة من الاتصالات
+         * تنطلق كلها دفعة وحدة عند كل إعادة تشغيل للسيرفر، خصوصاً لو عندك
+         * عدد كبير من الحسابات.
+         */
+        if (i < accounts.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 700));
         }
     }
 }
