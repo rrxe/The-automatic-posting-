@@ -3,7 +3,6 @@ import { registerOfficialTelegramAuth } from "./web/officialTelegramAuth.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-
 import { bot } from "./bot/index.js";
 import { env } from "./config/env.js";
 
@@ -21,7 +20,6 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
-
 registerOfficialTelegramAuth(app);
 
 app.get("/", (_req, res) => {
@@ -39,23 +37,14 @@ app.get("/health", (_req, res) => {
   });
 });
 
-function sleep(ms: number) {
-  return new Promise<void>(
-    (resolve) => {
-      setTimeout(
-        resolve,
-        ms
-      );
-    }
-  );
-}
-
 /*
- * لا نستخدم AbortSignal هنا لأن نسخة grammY/runner
- * الموجودة بالمشروع تستخدم نوع AbortSignal مختلف.
+ * نمنع انتظار deleteWebhook لوقت طويل.
  *
- * عميل bot نفسه عنده timeoutSeconds = 15،
- * لذلك الطلب لن يبقى معلقاً للأبد.
+ * مهم:
+ * لا نستخدم AbortSignal هنا بسبب اختلاف نوع AbortSignal
+ * في نسخة grammY/abort-controller الموجودة بالمشروع.
+ *
+ * bot نفسه مضبوط على timeoutSeconds = 15.
  */
 async function deleteWebhookSafely() {
   try {
@@ -80,13 +69,26 @@ async function deleteWebhookSafely() {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise<void>(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        ms
+      );
+    }
+  );
+}
+
 /*
- * تشغيل Telegram Bot API في حلقة مستقلة.
+ * تشغيل Telegram.
  *
- * إذا Telegram غير متاح:
- * - لا يسقط Node
- * - لا يغلق HTTP server
- * - يعيد المحاولة تلقائياً
+ * إذا Telegram API متاح:
+ *   يبدأ فوراً.
+ *
+ * إذا يوجد ETIMEDOUT:
+ *   لا يسقط Node.
+ *   يعيد المحاولة كل 5 ثواني.
  */
 async function startTelegramBot() {
   let attempt = 0;
@@ -100,14 +102,14 @@ async function startTelegramBot() {
       );
 
       /*
-       * حذف webhook ليس شرطاً أن ينجح حتى نواصل
-       * محاولة تهيئة البوت.
+       * نحاول إزالة الـwebhook.
+       *
+       * الفشل هنا لا يمنعنا من محاولة bot.init().
        */
       await deleteWebhookSafely();
 
       /*
-       * bot.init() يعمل getMe.
-       * عميل Bot مضبوط على timeout = 15 ثانية.
+       * getMe
        */
       await bot.init();
 
@@ -116,22 +118,11 @@ async function startTelegramBot() {
       );
 
       /*
-       * في runner:
-       * fetch موجود داخل runner.fetch
+       * Long polling.
+       *
+       * نستخدم run() مثل مشروعك الأصلي.
        */
-      run(
-        bot,
-        {
-          runner: {
-            fetch: {
-              timeout: 30
-            },
-            retryInterval: 3000,
-            maxRetryTime:
-              24 * 60 * 60 * 1000
-          }
-        }
-      );
+      run(bot);
 
       console.log(
         "Telegram update runner started successfully."
@@ -157,8 +148,7 @@ async function main() {
   );
 
   /*
-   * شغّل HTTP server فوراً.
-   * Telegram لا يستطيع إسقاط خدمة الويب.
+   * HTTP server يبدأ أولاً.
    */
   app.listen(
     env.PORT,
@@ -170,7 +160,7 @@ async function main() {
   );
 
   /*
-   * تنظيف عمليات النشر العالقة من التشغيل السابق.
+   * استعادة عمليات النشر العالقة.
    */
   try {
     const reconciled =
@@ -190,37 +180,36 @@ async function main() {
     );
   }
 
+  /*
+   * تشغيل مراقبة الحسابات الخاملة.
+   */
   startIdleClientSweeper();
 
   /*
-   * أولاً نبدأ Bot API.
-   * الحسابات الشخصية لا نعطيها فرصة لتأخير /start.
+   * مهم:
+   * لا ننتظر warmTelegramAccounts قبل تشغيل البوت.
    */
-  await startTelegramBot();
-
-  /*
-   * بعد نجاح Bot API فقط،
-   * نبدأ warmup للحسابات الشخصية في الخلفية.
-   *
-   * الجلسات المنتهية يتم تخطيها من clientManager.
-   */
-  void warmTelegramAccounts().catch(
-    (error) => {
+  void warmTelegramAccounts()
+    .catch((error) => {
       console.error(
         "ACCOUNT WARMUP STARTUP ERROR:",
         error
       );
-    }
-  );
+    });
+
+  /*
+   * تشغيل Telegram.
+   */
+  await startTelegramBot();
 }
 
 main().catch(
   (error) => {
     /*
-     * لا نستخدم process.exit(1)
-     * بسبب مشكلة Telegram.
+     * لا نعمل process.exit(1).
      *
-     * startTelegramBot لديه retry داخلي.
+     * لو Telegram غير متاح، startTelegramBot()
+     * عنده إعادة محاولة داخلية.
      */
     console.error(
       "FATAL ERROR:",

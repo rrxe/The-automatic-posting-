@@ -7,10 +7,11 @@ import { handleAdminText } from "./adminText.js";
 import { handleMessageText } from "./messageComposer.js";
 import { handleBroadcastPhoto } from "./broadcast.js";
 /*
- * مهلة Telegram Bot API.
+ * Telegram Bot API timeout.
  *
- * هذا يمنع deleteWebhook / getMe / sendMessage
- * من البقاء معلقة وقت طويل إذا شبكة Telegram غير متاحة.
+ * مهم:
+ * لا نستخدم Proxy.
+ * فقط نمنع طلبات Bot API من البقاء معلقة وقتًا طويلاً.
  */
 export const bot = new Bot(env.BOT_TOKEN, {
     client: {
@@ -18,8 +19,8 @@ export const bot = new Bot(env.BOT_TOKEN, {
     }
 });
 /*
- * نحافظ على ترتيب رسائل نفس المستخدم/المحادثة،
- * بينما المستخدمون المختلفون يمكن معالجتهم بالتوازي.
+ * نحافظ على ترتيب تحديثات نفس المحادثة،
+ * بدون تجميد المستخدمين الآخرين.
  */
 bot.use(sequentialize((ctx) => {
     const chat = ctx.chat?.id.toString();
@@ -29,6 +30,9 @@ bot.use(sequentialize((ctx) => {
         user
     ].filter((v) => Boolean(v));
 }));
+/*
+ * /start
+ */
 bot.command("start", async (ctx) => {
     try {
         await handleStart(ctx);
@@ -41,6 +45,9 @@ bot.command("start", async (ctx) => {
         catch { }
     }
 });
+/*
+ * أزرار Telegram
+ */
 bot.on("callback_query:data", async (ctx) => {
     try {
         await handleCallbacks(ctx);
@@ -56,20 +63,15 @@ bot.on("callback_query:data", async (ctx) => {
         catch { }
     }
 });
+/*
+ * الرسائل النصية
+ */
 bot.on("message:text", async (ctx, next) => {
     try {
-        /*
-         * أولاً نعطي نظام إنشاء المنشورات
-         * فرصة لمعالجة الرسالة.
-         */
         const handled = await handleMessageText(ctx, ctx.message.text);
         if (handled) {
             return;
         }
-        /*
-         * إذا لم تكن الرسالة منشوراً،
-         * نمررها إلى نظام الإدارة.
-         */
         await handleAdminText(ctx);
     }
     catch (error) {
@@ -77,6 +79,9 @@ bot.on("message:text", async (ctx, next) => {
     }
     await next();
 });
+/*
+ * الصور
+ */
 bot.on("message:photo", async (ctx) => {
     try {
         await handleBroadcastPhoto(ctx);
@@ -85,6 +90,9 @@ bot.on("message:photo", async (ctx) => {
         console.error("PHOTO HANDLER ERROR:", error);
     }
 });
+/*
+ * أخطاء البوت العامة
+ */
 bot.catch((error) => {
     console.error("BOT ERROR:", error);
 });

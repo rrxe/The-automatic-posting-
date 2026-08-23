@@ -13,10 +13,11 @@ import { handleBroadcastPhoto } from "./broadcast.js";
 import type { BotContext } from "../types/bot.js";
 
 /*
- * مهلة Telegram Bot API.
+ * Telegram Bot API timeout.
  *
- * هذا يمنع deleteWebhook / getMe / sendMessage
- * من البقاء معلقة وقت طويل إذا شبكة Telegram غير متاحة.
+ * مهم:
+ * لا نستخدم Proxy.
+ * فقط نمنع طلبات Bot API من البقاء معلقة وقتًا طويلاً.
  */
 export const bot =
   new Bot<BotContext>(
@@ -29,8 +30,8 @@ export const bot =
   );
 
 /*
- * نحافظ على ترتيب رسائل نفس المستخدم/المحادثة،
- * بينما المستخدمون المختلفون يمكن معالجتهم بالتوازي.
+ * نحافظ على ترتيب تحديثات نفس المحادثة،
+ * بدون تجميد المستخدمين الآخرين.
  */
 bot.use(
   sequentialize((ctx) => {
@@ -50,6 +51,9 @@ bot.use(
   })
 );
 
+/*
+ * /start
+ */
 bot.command(
   "start",
   async (ctx) => {
@@ -70,6 +74,9 @@ bot.command(
   }
 );
 
+/*
+ * أزرار Telegram
+ */
 bot.on(
   "callback_query:data",
   async (ctx) => {
@@ -92,14 +99,13 @@ bot.on(
   }
 );
 
+/*
+ * الرسائل النصية
+ */
 bot.on(
   "message:text",
   async (ctx, next) => {
     try {
-      /*
-       * أولاً نعطي نظام إنشاء المنشورات
-       * فرصة لمعالجة الرسالة.
-       */
       const handled =
         await handleMessageText(
           ctx,
@@ -110,10 +116,6 @@ bot.on(
         return;
       }
 
-      /*
-       * إذا لم تكن الرسالة منشوراً،
-       * نمررها إلى نظام الإدارة.
-       */
       await handleAdminText(ctx);
     } catch (error) {
       console.error(
@@ -126,6 +128,9 @@ bot.on(
   }
 );
 
+/*
+ * الصور
+ */
 bot.on(
   "message:photo",
   async (ctx) => {
@@ -140,6 +145,9 @@ bot.on(
   }
 );
 
+/*
+ * أخطاء البوت العامة
+ */
 bot.catch(
   (error) => {
     console.error(
