@@ -15,7 +15,7 @@ import { handleBroadcastPhoto } from "./broadcast.js";
  */
 export const bot = new Bot(env.BOT_TOKEN, {
     client: {
-        timeoutSeconds: 15
+        timeoutSeconds: 40
     }
 });
 /*
